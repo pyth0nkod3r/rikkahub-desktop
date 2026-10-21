@@ -52,7 +52,7 @@ export const CONTAINER_PORT = 8080;
  *  - 本机 netsh excludedportrange 未命中;网页检索未发现任何软件以 17455 为默认端口。
  *  注意:IANA「未分配」只说明没人登记,不代表没人用(热门软件的默认端口多数从不登记,
  *  如 Ollama 11434),所以「常见默认端口」核验与 IANA 核验缺一不可。 */
-export const DESKTOP_DEFAULT_PORT = 17455;
+export const DESKTOP_DEFAULT_PORT = 17475;
 
 /** 默认端口的唯一出口:容器 = 镜像契约端口,其余 = 桌面冷门默认。 */
 export function defaultPreferredPort(inContainer: boolean): number {

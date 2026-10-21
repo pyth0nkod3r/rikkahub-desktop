@@ -9,7 +9,7 @@ export default defineConfig({
   server: {
     proxy: {
       "/api": {
-        target: "http://localhost:17455",
+        target: "http://localhost:17475",
         changeOrigin: true,
       },
     },

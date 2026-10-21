@@ -1348,9 +1348,9 @@ export const ConversationSidebar = React.memo(
               target="_blank"
               rel="noopener noreferrer"
               className="ml-auto truncate whitespace-nowrap text-xs font-normal text-foreground/80 hover:text-foreground transition-colors"
-              title="RikkaHub"
+              title="Rikkahub AgentX"
             >
-              RikkaHub
+              Rikkahub AgentX
             </a>
           </div>
 

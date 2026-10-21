@@ -6,7 +6,7 @@
 ;   Welcome → License (optional) → Install Dir → Data Dir (this) → Install → Finish.
 ;
 ; After files are installed, NSIS_HOOK_POSTINSTALL persists the choice to a plain-text
-; handoff file %APPDATA%\com.rikkahub.pc\installer-data-dir.txt. The Rust shell consumes
+; handoff file %APPDATA%\com.rikkahub.agentx.desktop\installer-data-dir.txt. The Rust shell consumes
 ; it on next launch: merges the path into user-config.json (load-modify-save) and deletes
 ; the file. The installer NEVER writes user-config.json itself — that file has exactly one
 ; writer (the shell). 专题6教训:本钩子曾以覆盖模式重写整个 user-config.json 且只写
@@ -106,10 +106,10 @@ FunctionEnd
 Function RikkahubReadExistingDataDir
   StrCpy $RIKKAHUB_EXISTING_DATA_DIR ""
 
-  IfFileExists "$APPDATA\com.rikkahub.pc\user-config.json" 0 rded_handoff
+  IfFileExists "$APPDATA\com.rikkahub.agentx.desktop\user-config.json" 0 rded_handoff
 
   ClearErrors
-  FileOpen $0 "$APPDATA\com.rikkahub.pc\user-config.json" r
+  FileOpen $0 "$APPDATA\com.rikkahub.agentx.desktop\user-config.json" r
   IfErrors rded_handoff
 
 rded_loop:
@@ -137,9 +137,9 @@ rded_close:
 rded_handoff:
   ; config json 没给出 data_dir → 查未消费的交接文件(装了但从没启动过的场景)。
   StrCmp $RIKKAHUB_EXISTING_DATA_DIR "" 0 rded_done
-  IfFileExists "$APPDATA\com.rikkahub.pc\installer-data-dir.txt" 0 rded_done
+  IfFileExists "$APPDATA\com.rikkahub.agentx.desktop\installer-data-dir.txt" 0 rded_done
   ClearErrors
-  FileOpen $0 "$APPDATA\com.rikkahub.pc\installer-data-dir.txt" r
+  FileOpen $0 "$APPDATA\com.rikkahub.agentx.desktop\installer-data-dir.txt" r
   IfErrors rded_done
   ; B3:新版交接文件是 UTF-16LE 带 BOM(FF FE),旧版安装器是 ANSI。嗅探 BOM 分派:
   ; FileReadUTF16LE 自动跳过 BOM(NSIS 3.0b3+),ANSI 旧文件走原 FileRead 兼容。
@@ -176,8 +176,8 @@ FunctionEnd
 !macro NSIS_HOOK_POSTINSTALL
   ${If} $RIKKAHUB_DATA_DIR != ""
   ${AndIf} $RIKKAHUB_DATA_DIR_FROM_PAGE == "1"
-    CreateDirectory "$APPDATA\com.rikkahub.pc"
-    FileOpen $1 "$APPDATA\com.rikkahub.pc\installer-data-dir.txt" w
+    CreateDirectory "$APPDATA\com.rikkahub.agentx.desktop"
+    FileOpen $1 "$APPDATA\com.rikkahub.agentx.desktop\installer-data-dir.txt" w
     FileWriteUTF16LE /BOM $1 '$RIKKAHUB_DATA_DIR'
     FileClose $1
     CreateDirectory "$RIKKAHUB_DATA_DIR"

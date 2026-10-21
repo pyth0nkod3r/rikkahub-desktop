@@ -1,11 +1,11 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Rikkahub",
-  "version": "2.0.0-preview-v5",
-  "identifier": "com.rikkahub.pc",
+  "productName": "Rikkahub-AgentX-Desktop",
+  "version": "2.0.0-agent.1",
+  "identifier": "com.rikkahub.agentx.desktop",
   "build": {
     "beforeDevCommand": "bun run dev",
-    "devUrl": "http://localhost:17455",
+    "devUrl": "http://localhost:17475",
     "beforeBuildCommand": "bun run build",
     "frontendDist": "../build/client"
   },
@@ -14,7 +14,7 @@
       {
         "label": "main",
         "visible": false,
-        "title": "RikkaHub",
+        "title": "Rikkahub AgentX Desktop",
         "url": "splash.html",
         "width": 1280,
         "height": 840,
@@ -38,10 +38,10 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
-    "publisher": "yuh-G",
-    "homepage": "https://github.com/yuh-G/rikkahub-desktop",
+    "publisher": "pyth0nkod3r",
+    "homepage": "https://github.com/pyth0nkod3r/rikkahub-desktop",
     "category": "Productivity",
-    "copyright": "© 2026 yuh-G. Based on RikkaHub by @re-ovo.",
+    "copyright": "© 2026 pyth0nkod3r. Based on RikkaHub by @re-ovo and Yuh-G.",
     "shortDescription": "Native Windows LLM chat client.",
     "longDescription": "Rikkahub is a native Windows LLM chat client that supports multiple AI providers (OpenAI, Anthropic, Google), MCP tools, web search across 17 services, image generation, and local model support via Ollama / LM Studio.",
     "icon": [

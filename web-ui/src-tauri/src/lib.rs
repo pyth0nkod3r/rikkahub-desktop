@@ -307,9 +307,9 @@ fn wait_for_sidecar_startup(
 /// 端口陷入无解循环，而真实原因可能是实例锁）。
 fn startup_failure_message(fatal_message: &Mutex<Option<String>>) -> String {
     if let Some(message) = fatal_message.lock().unwrap().clone() {
-        return format!("Rikkahub 启动失败：\n\n{message}");
+        return format!("Rikkahub AgentX 启动失败：\n\n{message}");
     }
-    "Rikkahub 启动失败：后端进程意外退出。\n\n\
+    "Rikkahub AgentX 启动失败：后端进程意外退出。\n\n\
      请重启尝试，诊断信息见应用安装目录下 pc-data/logs/server.log。"
         .to_string()
 }
@@ -537,14 +537,14 @@ fn tray_strings() -> TrayStrings {
     if is_zh {
         TrayStrings {
             show: "显示主窗口",
-            quit: "退出 Rikkahub",
-            tooltip: "Rikkahub",
+            quit: "退出 Rikkahub AgentX",
+            tooltip: "Rikkahub AgentX",
         }
     } else {
         TrayStrings {
             show: "Show window",
-            quit: "Quit Rikkahub",
-            tooltip: "Rikkahub",
+            quit: "Quit Rikkahub AgentX",
+            tooltip: "Rikkahub AgentX",
         }
     }
 }
@@ -704,7 +704,7 @@ fn show_startup_error(app: &AppHandle, message: &str) {
     app.dialog()
         .message(message)
         .kind(MessageDialogKind::Error)
-        .title("Rikkahub 启动失败")
+        .title("Rikkahub AgentX 启动失败")
         .blocking_show();
 }
 
@@ -781,7 +781,7 @@ pub fn run() {
                     (port_rx, dead, fatal)
                 }
                 Err(err) => {
-                    show_startup_error(&handle, &format!("Rikkahub 后端启动失败：\n\n{err}"));
+                    show_startup_error(&handle, &format!("Rikkahub AgentX 后端启动失败：\n\n{err}"));
                     handle.exit(1);
                     return Ok(());
                 }
