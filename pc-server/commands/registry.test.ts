@@ -12,13 +12,19 @@ describe("指令注册表:定义形状约束", () => {
 });
 
 describe("可用性矩阵解析(白名单缺省禁用)", () => {
-  test("对话模式(chat):/compact 可用", () => {
+  test("对话模式(chat):/compact, /plan, /build 可用", () => {
     const commands = resolveAvailableCommands("chat");
-    expect(commands).toEqual([{ name: "compact", hasArgument: true, executionTarget: "server" }]);
+    const names = commands.map((c) => c.name);
+    expect(names).toContain("compact");
+    expect(names).toContain("plan");
+    expect(names).toContain("build");
   });
 
-  test("pi 工作区:/compact 可用(绑 pi 原生 compaction)", () => {
-    expect(resolveAvailableCommands("pi").map((c) => c.name)).toContain("compact");
+  test("pi 工作区:/compact, /plan, /build 可用", () => {
+    const names = resolveAvailableCommands("pi").map((c) => c.name);
+    expect(names).toContain("compact");
+    expect(names).toContain("plan");
+    expect(names).toContain("build");
   });
 
   test("矩阵未声明的引擎缺省禁用(dsh/codex 未点亮)", () => {

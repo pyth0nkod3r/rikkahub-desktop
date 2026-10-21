@@ -39,15 +39,26 @@ export interface CommandDefinition {
   };
 }
 
-/** 全局指令表(V1 仅 /compact;后续指令 = 追加一行 + 绑实现,见方案 §6 路线图)。 */
+/** 全局指令表: /compact, /plan, /build */
 export const COMMAND_REGISTRY: readonly CommandDefinition[] = [
   {
-    // /compact [额外指示] —— 压缩会话上下文。执行入口复用既有
-    // POST /api/conversations/:id/compress(引擎原生优先,chat 回落 UI 历史压缩;
-    // 参数透传 additionalPrompt/customInstructions)。回车直接执行,不弹压缩框
-    // (压缩框保留为精细参数入口,两入口同 API 同状态通道)。
+    // /compact [额外指示] —— 压缩会话上下文。
     name: "compact",
     hasArgument: true,
+    executionTarget: "server",
+    availability: { chat: true, workspace: { pi: true } },
+  },
+  {
+    // /plan —— 切换到规划模式 (Plan Mode)。
+    name: "plan",
+    hasArgument: false,
+    executionTarget: "server",
+    availability: { chat: true, workspace: { pi: true } },
+  },
+  {
+    // /build —— 切换到构建执行模式 (Build Mode)。
+    name: "build",
+    hasArgument: false,
     executionTarget: "server",
     availability: { chat: true, workspace: { pi: true } },
   },

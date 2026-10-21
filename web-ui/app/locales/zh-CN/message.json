@@ -141,7 +141,16 @@
     "deny_dialog_desc": "可以填写拒绝原因（可选），会一并反馈给 AI，帮助它调整后续做法。",
     "deny_dialog_placeholder": "拒绝原因（可选）",
     "deny_dialog_confirm": "确认拒绝",
-    "deny_dialog_cancel": "取消"
+    "deny_dialog_cancel": "取消",
+    "propose_plan_title": "实现计划方案",
+    "propose_plan_waiting_title": "AI 提交了实现计划方案",
+    "propose_plan_waiting_desc": "请审阅下方的实施计划。批准后会话将自动切换至建造模式 (Build Mode) 并解锁写权限开始执行。",
+    "propose_plan_accept": "批准计划并进入建造",
+    "propose_plan_decline": "拒绝计划",
+    "propose_plan_approved_badge": "计划已批准 (已切至建造模式)",
+    "propose_plan_declined_badge": "计划已拒绝",
+    "propose_plan_steps": "执行步骤 ({{count}})",
+    "propose_plan_details": "详细计划"
   },
   "media_part": {
     "video_load_failed": "加载视频失败：{{url}}",

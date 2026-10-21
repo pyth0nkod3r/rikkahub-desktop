@@ -1,3 +1,4 @@
+import { PROPOSE_PLAN_TOOL_NAME, proposePlanToolSchema, parseProposePlanInput, formatProposePlanResult } from "../tools/propose-plan";
 // pi-engine/general-tools.ts — 通用工具与 MCP 桥注册为 pi customTools(P4,方案 §3.2/§4.9)
 //
 // 挂载裁决(§4.9 落定):search_web / scrape_web / save_memory / ask_user + 按助手启用的 mcp__*。
@@ -145,6 +146,34 @@ function buildAskUserTool(
 /** 会话装配入口:声明与聊天引擎同源(openAiSearchTools 带全局开关门控、save_memory
  *  带记忆开关+写策略门控、openAiMcpTools 带服务器/工具双层启用过滤),关掉的面在
  *  这里天然为空——用户没启用 MCP 时 pi 会话零 MCP 工具(§3.2)。 */
+
+function buildProposePlanTool(ctx: PiGeneralToolsContext): ToolDefinition {
+  return {
+    name: PROPOSE_PLAN_TOOL_NAME,
+    label: PROPOSE_PLAN_TOOL_NAME,
+    description: proposePlanToolSchema.function.description,
+    parameters: proposePlanToolSchema.function.parameters as unknown as PiToolParameters,
+    executionMode: "sequential",
+    async execute(toolCallId, params, signal) {
+      const input = parseProposePlanInput(params);
+      const summary = `Plan: ${input.title}`;
+      await gateToolApproval(
+        { type: "pending" },
+        {
+          conversationId: ctx.conversation.id,
+          toolCallId,
+          sink: ctx.sink,
+          signal,
+          toolName: PROPOSE_PLAN_TOOL_NAME,
+          summary,
+        },
+      );
+      const entries = formatProposePlanResult(true);
+      return toGeneralPiToolResult(entries);
+    },
+  };
+}
+
 export function createPiGeneralTools(ctx: PiGeneralToolsContext): ToolDefinition[] {
   const declarations = [
     ...openAiSearchTools(ctx.model),
@@ -153,7 +182,7 @@ export function createPiGeneralTools(ctx: PiGeneralToolsContext): ToolDefinition
     ),
     ...openAiMcpTools(ctx.assistant),
   ];
-  return declarations.map((decl) => {
+  const tools = declarations.map((decl) => {
     const shaped = {
       name: String(decl.function.name),
       description: String(decl.function.description ?? ""),
@@ -161,4 +190,8 @@ export function createPiGeneralTools(ctx: PiGeneralToolsContext): ToolDefinition
     };
     return shaped.name === ASK_USER_TOOL_NAME ? buildAskUserTool(shaped, ctx) : buildGeneralTool(shaped, ctx);
   });
+  if (ctx.conversation.workspaceId || ctx.conversation.agentMode === "plan") {
+    tools.push(buildProposePlanTool(ctx));
+  }
+  return tools;
 }

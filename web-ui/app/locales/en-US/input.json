@@ -4,6 +4,14 @@
     "compact": {
       "description": "Compact the conversation context",
       "argument_hint": "[instructions]"
+    },
+    "plan": {
+      "description": "Switch to Plan Mode (read-only inspection and proposal)",
+      "argument_hint": ""
+    },
+    "build": {
+      "description": "Switch to Build Mode (full-capability execution and modification)",
+      "argument_hint": ""
     }
   },
   "mcp": {

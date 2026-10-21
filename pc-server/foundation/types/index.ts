@@ -327,6 +327,8 @@ export interface Conversation {
    *  (编码器自校验,编辑/fork 后失效记录自动跳过)。仅存 PC 自有库;跨端导出
    *  白名单不含此列。 */
   engineCompactions?: JsonValue[] | null;
+  /** 会话 Agent 模式: plan=规划模式, build=构建执行模式(默认)。 */
+  agentMode?: "build" | "plan";
 }
 
 // ----- 工作区(agent 模式)领域模型 -----
@@ -568,6 +570,7 @@ export interface PcConversationRow {
   workspace_id?: string | null;
   workspace_cwd?: string | null;
   engine_compactions?: string | null;
+  agent_mode?: string | null;
 }
 export interface PcMessageNodeRow {
   id: string;

@@ -123,6 +123,8 @@ export type ConversationListDto = {
   isGenerating: boolean;
   /** 工作区归属(agent 模式):null = 对话模式。容器层按此分流会话列表。 */
   workspaceId: string | null;
+  /** Agent 模式: plan | build */
+  agentMode?: "build" | "plan";
 };
 
 /** 工作区(agent 模式):workspaces 路由的元素。status 为运行时计算(missing=根目录丢失)。 */

@@ -1,3 +1,4 @@
+import { isToolAllowedInPlanMode } from "../agents/agent-mode";
 // workspace/runtime.ts — 工作区工具运行时(M1-4:挂载判定 + 执行分发)
 // 职责边界:本模块把"会话 → 工作区 → pi 工具实例"串成一条线——
 //   声明:openAiWorkspaceTools(conversation) 产出工具声明(P6 起唯一消费者是
@@ -321,6 +322,9 @@ export async function executeWorkspaceToolCore(
     );
   }
   const workspace = getWorkspace(conversation.workspaceId);
+  if (conversation?.agentMode === "plan" && !isToolAllowedInPlanMode(name)) {
+    throw new Error(`Tool '${name}' is locked in Plan Mode. In Plan Mode, you may only inspect the workspace and gather context. Once your plan is ready, invoke 'propose_plan' for user review and approval to switch to Build Mode.`);
+  }
   const unavailable = workspaceUnavailableReason(workspace);
   if (unavailable) throw new Error(`Workspace tools are unavailable: ${unavailable}.`);
   const runtime: WorkspaceRuntime = { workspace: workspace!, root: workspace!.root, cwd: resolveCwd(workspace!, conversation.workspaceCwd) };

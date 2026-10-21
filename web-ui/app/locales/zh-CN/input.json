@@ -4,6 +4,14 @@
     "compact": {
       "description": "压缩当前会话上下文",
       "argument_hint": "[额外指示]"
+    },
+    "plan": {
+      "description": "切换至规划模式（只读检查代码与提交计划方案）",
+      "argument_hint": ""
+    },
+    "build": {
+      "description": "切换至建造模式（解锁写权限并开始执行任务）",
+      "argument_hint": ""
     }
   },
   "mcp": {

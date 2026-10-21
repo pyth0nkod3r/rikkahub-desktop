@@ -131,6 +131,18 @@ function ensureConversationWorkspaceColumns(db: InstanceType<typeof Database>): 
  *  可空列旧数据天然兼容(NULL = 无压缩记录)。P2 的 pi_session_file 列不再读写,
  *  老库中留作死列(SQLite 删列代价不值当)。仅存 PC 自有库,跨端导出白名单不含此列。
  *  export 仅为回归测试(老库升级路径需在真实 ALTER 上验证)。 */
+
+export function ensureConversationAgentModeColumn(db: InstanceType<typeof Database>): void {
+  try {
+    const cols = db.prepare("PRAGMA table_info(pc_conversation)").all() as { name: string }[];
+    const names = new Set(cols.map((c) => c.name));
+    if (names.has("agent_mode")) return;
+    db.exec("ALTER TABLE pc_conversation ADD COLUMN agent_mode TEXT NOT NULL DEFAULT 'build'");
+  } catch (err) {
+    console.warn("[conv-db] 会话 agent_mode 列迁移失败", err);
+  }
+}
+
 export function ensureConversationEngineCompactionsColumn(db: InstanceType<typeof Database>): void {
   try {
     const cols = db.prepare("PRAGMA table_info(pc_conversation)").all() as { name: string }[];
@@ -175,6 +187,7 @@ function openConversationsDbUnsafe(): InstanceType<typeof Database> {
     ensureConversationInjectionColumns(db);
     ensureConversationWorkspaceColumns(db);
     ensureConversationEngineCompactionsColumn(db);
+    ensureConversationAgentModeColumn(db);
     ensureMessageFtsTable(db);
     // FTS 自愈重建：老库首次升级（表刚建、空）或索引意外丢失时，从节点表全量重建。
     // 幂等：行数>0 时零成本跳过。
@@ -219,6 +232,7 @@ export function loadConversationMetasFromDb(db: InstanceType<typeof Database>): 
     workspaceId: row.workspace_id ?? null,
     workspaceCwd: row.workspace_cwd ?? null,
     engineCompactions: safeParseJsonArray(row.engine_compactions),
+    agentMode: (row.agent_mode === "plan" ? "plan" : "build") as "build" | "plan",
   }));
 }
 
@@ -359,11 +373,11 @@ function safeParseStringArray(raw: string): string[] {
 // 该会话全部节点行被级联清空。流式期间每 200ms flush 都 upsert 会话行,等于整个流式期间
 // 磁盘上只剩正在补写的脏节点;流式中途进程死亡 = 会话历史永久丢失。
 const UPSERT_CONVERSATION_SQL =
-  "INSERT INTO pc_conversation (id, assistant_id, title, system_prompt, suggestions, is_pinned, create_at, update_at, mode_injection_ids, lorebook_ids, workspace_id, workspace_cwd, engine_compactions) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+  "INSERT INTO pc_conversation (id, assistant_id, title, system_prompt, suggestions, is_pinned, create_at, update_at, mode_injection_ids, lorebook_ids, workspace_id, workspace_cwd, engine_compactions, agent_mode) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
   "ON CONFLICT(id) DO UPDATE SET assistant_id = excluded.assistant_id, title = excluded.title, system_prompt = excluded.system_prompt, " +
   "suggestions = excluded.suggestions, is_pinned = excluded.is_pinned, create_at = excluded.create_at, update_at = excluded.update_at, " +
   "mode_injection_ids = excluded.mode_injection_ids, lorebook_ids = excluded.lorebook_ids, workspace_id = excluded.workspace_id, workspace_cwd = excluded.workspace_cwd, " +
-  "engine_compactions = excluded.engine_compactions";
+  "engine_compactions = excluded.engine_compactions, agent_mode = excluded.agent_mode";
 
 const UPSERT_NODE_SQL =
   "INSERT INTO pc_message_node (id, conversation_id, node_index, messages, select_index) VALUES (?, ?, ?, ?, ?) " +

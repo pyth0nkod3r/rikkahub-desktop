@@ -1,0 +1,112 @@
+name: Build Windows Desktop Installer
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version label (e.g. 2.0.0-agent.1)'
+        required: false
+        default: '2.0.0-agent.1'
+  push:
+    branches: [main, master, feature/agent-harness]
+    tags: ['v*.*.*']
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.2'
+
+      - name: Setup Rust & Cargo Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Restore Pi Vendor Baseline
+        shell: bash
+        run: |
+          git clone --filter=blob:none --no-checkout https://github.com/earendil-works/pi.git pi
+          cd pi
+          git checkout d981de1229ef899957bbe968bc8dcda02a21f477
+          git reset --hard
+          git apply --ignore-space-change --ignore-whitespace ../pi-patches/*.patch
+          bun install
+          mkdir -p packages/ai/src/providers/data
+          cp ../pi-model-data/*.json ../pi-model-data/.manifest.json packages/ai/src/providers/data/
+
+      - name: Build MSYS2 Embedded Bash Bundle
+        shell: bash
+        run: |
+          cd pc-server
+          bun install --frozen-lockfile
+          # Extract minimal bash+coreutils closure from Git for Windows on the GitHub runner
+          bun run scripts/build-bash-bundle.ts --src "C:\\Program Files\\Git" --force
+
+      - name: Compile Backend Server Binary
+        shell: bash
+        run: |
+          cd pc-server
+          bun build --compile --target=bun-windows-x64 server.ts --outfile ../dist/rikkahub-pc.exe
+          bun run scripts/sync-dist-assets.ts
+          mkdir -p ../web-ui/src-tauri/binaries
+          cp ../dist/rikkahub-pc.exe ../web-ui/src-tauri/binaries/rikkahub-server-x86_64-pc-windows-msvc.exe
+
+      - name: Build Web Frontend & Tauri Windows Installer
+        shell: bash
+        run: |
+          cd web-ui
+          bun install --frozen-lockfile
+          bun run build
+          cargo tauri build
+
+      - name: Package Portable Zip
+        shell: pwsh
+        run: |
+          $ver = "${{ github.event.inputs.version }}"
+          if ([string]::IsNullOrWhiteSpace($ver)) {
+            if ($env:GITHUB_REF -like "refs/tags/v*") {
+              $ver = $env:GITHUB_REF.Substring(11)
+            } else {
+              $ver = "snapshot-${{ github.sha }}".Substring(0, 16)
+            }
+          }
+          New-Item -ItemType Directory -Path "dist/portable/rikkahub" -Force | Out-Null
+          Copy-Item "dist/rikkahub-pc.exe" "dist/portable/rikkahub/"
+          New-Item -ItemType Directory -Path "dist/portable/rikkahub/web-ui/build" -Force | Out-Null
+          Copy-Item "web-ui/build/client" "dist/portable/rikkahub/web-ui/build/client" -Recurse
+          if (Test-Path "icons") { Copy-Item "icons" "dist/portable/rikkahub/icons" -Recurse }
+          if (Test-Path "fonts") { Copy-Item "fonts" "dist/portable/rikkahub/fonts" -Recurse }
+          Compress-Archive -Path "dist/portable/rikkahub" -DestinationPath "dist/Rikkahub_${ver}_windows_x64_portable.zip" -Force
+
+      - name: Upload Windows NSIS Installer Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Rikkahub_Windows_Installer
+          path: web-ui/src-tauri/target/release/bundle/nsis/*.exe
+          retention-days: 30
+
+      - name: Upload Windows Portable Zip Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Rikkahub_Windows_Portable_Zip
+          path: dist/*_portable.zip
+          retention-days: 30
+
+      - name: Attach Artifacts to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            web-ui/src-tauri/target/release/bundle/nsis/*.exe
+            dist/*_portable.zip

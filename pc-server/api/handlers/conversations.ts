@@ -780,6 +780,15 @@ export async function handleConversationRoutes(request: Request, url: URL, path:
       broadcastList();
       return json({ conversationId: fork.id });
     }
+    if (sub === "agent-mode" && request.method === "POST") {
+      const body = await readJson<{ mode?: "build" | "plan" }>(request);
+      const targetMode = body.mode === "plan" ? "plan" : "build";
+      conversation.agentMode = targetMode;
+      conversation.updateAt = Date.now();
+      persistConversation(conversation);
+      broadcastConversation(conversation);
+      return json({ ok: true, agentMode: targetMode });
+    }
     if (sub === "tool-approval" && request.method === "POST") {
       const body = await readJson<{ toolCallId?: string; approved?: boolean; reason?: string; answer?: string }>(request);
       let changed = false;
@@ -796,6 +805,19 @@ export async function handleConversationRoutes(request: Request, url: URL, path:
             };
           });
         }
+      }
+      let isPlanApproval = false;
+      for (const node of conversation.messages) {
+        for (const msg of node.messages) {
+          for (const part of msg.parts) {
+            if (part && typeof part === "object" && (part as any).type === "tool" && (part as any).toolCallId === body.toolCallId && (part as any).toolName === "propose_plan") {
+              if (body.approved) isPlanApproval = true;
+            }
+          }
+        }
+      }
+      if (isPlanApproval) {
+        conversation.agentMode = "build";
       }
       if (!changed) return error("Tool call not found", 404);
       conversation.updateAt = Date.now();

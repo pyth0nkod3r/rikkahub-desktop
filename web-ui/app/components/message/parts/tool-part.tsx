@@ -7,6 +7,7 @@ import {
   BookX,
   Check,
   Clipboard,
+  ClipboardList,
   ClipboardPaste,
   Clock3,
   FileSearch,
@@ -82,6 +83,7 @@ const TOOL_NAMES = {
   CLIPBOARD: "clipboard_tool",
   ASK_USER: "ask_user",
   USE_SKILL: "use_skill",
+  PROPOSE_PLAN: "propose_plan",
 } as const;
 
 const MEMORY_ACTIONS = {
@@ -287,6 +289,7 @@ function getToolIcon(toolName: string, action?: string) {
 
   if (toolName === TOOL_NAMES.ASK_USER) return MessageCircleQuestion;
   if (toolName === TOOL_NAMES.USE_SKILL) return Sparkles;
+  if (toolName === TOOL_NAMES.PROPOSE_PLAN) return ClipboardList;
 
   return Wrench;
 }
@@ -323,6 +326,7 @@ function getToolTitle(toolName: string, args: unknown, t: TFunction): string {
   }
 
   if (toolName === TOOL_NAMES.ASK_USER) return t("tool_part.ask_user_title");
+  if (toolName === TOOL_NAMES.PROPOSE_PLAN) return t("tool_part.propose_plan_title");
 
   if (toolName === TOOL_NAMES.USE_SKILL) {
     const skillName = getStringField(args, "name");
@@ -752,6 +756,142 @@ function AskUserToolStep({
   );
 }
 
+
+function ProposePlanToolStep({
+  tool,
+  onToolApproval,
+}: ToolPartProps) {
+  const { t } = useTranslation("message");
+
+  const args = React.useMemo(() => safeJsonParse(tool.input) as Record<string, unknown> | null, [tool.input]);
+  const title = String(args?.title ?? "Implementation Plan");
+  const overview = typeof args?.overview === "string" ? args.overview : "";
+  const steps = Array.isArray(args?.steps) ? args.steps.map(String) : [];
+  const planMarkdown = typeof args?.plan_markdown === "string" ? args.plan_markdown : "";
+
+  const isPending = tool.approvalState.type === "pending";
+  const isApproved = tool.approvalState.type === "approved" || tool.approvalState.type === "answered";
+  const isDenied = tool.approvalState.type === "denied";
+
+  const handleApprove = () => {
+    if (!onToolApproval) return;
+    void onToolApproval(tool.toolCallId, true, "", "");
+  };
+
+  const handleDecline = () => {
+    if (!onToolApproval) return;
+    void onToolApproval(tool.toolCallId, false, "Plan declined by user", "");
+  };
+
+  if (isPending && onToolApproval) {
+    return (
+      <div
+        className="my-3 rounded-2xl border border-primary/40 bg-primary/5 p-4 shadow-sm ring-1 ring-primary/10"
+        role="region"
+        aria-live="polite"
+      >
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary">
+            <ClipboardList className="h-5 w-5" />
+          </div>
+          <div className="min-w-0 flex-1 space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="text-base font-semibold text-foreground">
+                {title}
+              </span>
+              <span className="rounded-full bg-primary/20 px-2 py-0.5 text-xs font-medium text-primary">
+                Plan Mode
+              </span>
+              <span className="size-2 animate-pulse rounded-full bg-primary" aria-hidden />
+            </div>
+            <p className="text-xs text-muted-foreground">{t("tool_part.propose_plan_waiting_desc")}</p>
+          </div>
+        </div>
+
+        {overview ? (
+          <div className="mt-3 text-sm text-foreground/90 bg-background/50 rounded-lg p-3 border border-border/40">
+            {overview}
+          </div>
+        ) : null}
+
+        {steps.length > 0 ? (
+          <div className="mt-3 space-y-1.5">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              {t("tool_part.propose_plan_steps", { count: steps.length })}
+            </span>
+            <ul className="space-y-1 text-sm">
+              {steps.map((step, idx) => (
+                <li key={idx} className="flex items-start gap-2 bg-background/30 rounded px-2.5 py-1.5 border border-border/30">
+                  <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[11px] font-medium text-primary mt-0.5">
+                    {idx + 1}
+                  </span>
+                  <span className="flex-1 text-foreground/90">{step}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        {planMarkdown ? (
+          <details className="mt-3 rounded-lg border border-border/40 bg-background/30 p-2 text-xs">
+            <summary className="cursor-pointer font-medium text-muted-foreground hover:text-foreground">
+              {t("tool_part.propose_plan_details")}
+            </summary>
+            <div className="mt-2 whitespace-pre-wrap font-mono text-[11px] text-foreground/80 max-h-48 overflow-y-auto">
+              {planMarkdown}
+            </div>
+          </details>
+        ) : null}
+
+        <div className="mt-4 flex items-center justify-end gap-2 border-t border-border/30 pt-3">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={handleDecline}
+            className="text-xs text-muted-foreground hover:text-destructive"
+          >
+            <X className="mr-1 h-3.5 w-3.5" />
+            {t("tool_part.propose_plan_decline")}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            onClick={handleApprove}
+            className="text-xs bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
+          >
+            <Check className="mr-1 h-3.5 w-3.5" />
+            {t("tool_part.propose_plan_accept")}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="my-2 rounded-xl border border-border/60 bg-muted/20 p-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <ClipboardList className="h-4 w-4 text-primary" />
+          <span className="text-sm font-medium">{title}</span>
+        </div>
+        {isApproved ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+            <Check className="h-3 w-3" />
+            {t("tool_part.propose_plan_approved_badge")}
+          </span>
+        ) : isDenied ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-destructive/15 px-2 py-0.5 text-xs font-medium text-destructive">
+            <X className="h-3 w-3" />
+            {t("tool_part.propose_plan_declined_badge")}
+          </span>
+        ) : null}
+      </div>
+      {overview ? <p className="mt-1 text-xs text-muted-foreground">{overview}</p> : null}
+    </div>
+  );
+}
+
 export function ToolPart({
   tool,
   loading = false,
@@ -762,7 +902,24 @@ export function ToolPart({
   isFirst,
   isLast,
 }: ToolPartProps) {
-  if (tool.toolName === TOOL_NAMES.ASK_USER) {
+  if (tool.toolName === TOOL_NAMES.PROPOSE_PLAN) {
+    return (
+      <ProposePlanToolStep
+        tool={tool}
+        loading={loading}
+        messageCreatedAt={messageCreatedAt}
+        messageFinishedAt={messageFinishedAt}
+        awaitingApproval={awaitingApproval}
+        onToolApproval={onToolApproval}
+        isFirst={isFirst}
+        isLast={isLast}
+      />
+    );
+  }
+  if (tool.toolName === TOOL_NAMES.ASK_USER || tool.toolName === TOOL_NAMES.PROPOSE_PLAN) {
+    return null;
+  }
+  if (false && tool.toolName === TOOL_NAMES.ASK_USER) {
     return (
       <AskUserToolStep
         tool={tool}

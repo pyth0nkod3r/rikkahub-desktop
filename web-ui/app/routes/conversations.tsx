@@ -1834,7 +1834,15 @@ const ConversationPaneView = React.memo(function ConversationPaneView({
   );
   // 防两表漂移(方案 §3.1):服务端说可用但前端无执行器的指令不展示,并留痕便于排查。
   const slashCommands = React.useMemo(() => {
-    const known = availableSlashCommands.filter((command) => command.name in slashExecutors);
+    let known = availableSlashCommands.filter((command) => command.name in slashExecutors);
+    // Mode-aware slash command filtering (Pyth0nkod3r parity):
+    // In Plan mode, hide /plan and offer /build. In Build mode, hide /build and offer /plan.
+    const currentMode = activeConversationMeta?.agentMode ?? "build";
+    if (currentMode === "plan") {
+      known = known.filter((c) => c.name !== "plan");
+    } else {
+      known = known.filter((c) => c.name !== "build");
+    }
     if (known.length !== availableSlashCommands.length) {
       const missing = availableSlashCommands.filter((c) => !(c.name in slashExecutors)).map((c) => c.name);
       console.warn("[slash-commands] 服务端清单存在前端未实现的指令,已隐藏:", missing);

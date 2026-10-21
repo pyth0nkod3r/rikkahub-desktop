@@ -1,3 +1,4 @@
+import { PLAN_MODE_SYSTEM_PROMPT } from "../agents/agent-mode";
 // pi-engine/resources.ts — pi 会话资源装配(P4,方案 §三/§4.2 的落点)
 //
 // 统一管理模型的执行层:每类资源只有一个"家",pi 每次会话由此注满——
@@ -113,6 +114,7 @@ export function buildPiAppendSystemPrompt(
   return [
     frozenPersona(conversation, assistant, model),
     buildSearchContext(),
+    conversation.agentMode === "plan" ? PLAN_MODE_SYSTEM_PROMPT : "",
     memoryBlock,
     recentChatsBlock,
     ...(extra ?? []),
