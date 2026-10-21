@@ -29,6 +29,8 @@ import type { ToolDefinition } from "../../pi/packages/coding-agent/src/core/ext
 import type { Assistant, Conversation, JsonValue, Model, ToolOutputEntry } from "../foundation/types";
 import type { GenerationEventSink, GenerationTarget } from "../inference-engine/events";
 import { openAiLocalTools, openAiMcpTools, openAiSearchTools } from "../tools/bound";
+import { openAiSubAgentTools } from "../tools/subagent-tools";
+import { SubAgentToolPolicies } from "../subagents/policy";
 import { executeToolCall, realizeToolResult, toolResultToParts } from "../tools/execution";
 import { openAiToolOutput } from "../tools/format";
 import { initialApprovalState } from "../tools/approval";
@@ -175,13 +177,17 @@ function buildProposePlanTool(ctx: PiGeneralToolsContext): ToolDefinition {
 }
 
 export function createPiGeneralTools(ctx: PiGeneralToolsContext): ToolDefinition[] {
-  const declarations = [
+  const allDeclarations = [
     ...openAiSearchTools(ctx.model),
     ...openAiLocalTools(ctx.assistant).filter(
       (tool) => tool.function.name === "save_memory" || tool.function.name === ASK_USER_TOOL_NAME,
     ),
     ...openAiMcpTools(ctx.assistant),
+    ...openAiSubAgentTools(),
   ];
+  const declarations = SubAgentToolPolicies.isSubAgent(ctx.conversation.id)
+    ? allDeclarations.filter((d) => SubAgentToolPolicies.permits(ctx.conversation.id, String(d.function.name)))
+    : allDeclarations;
   const tools = declarations.map((decl) => {
     const shaped = {
       name: String(decl.function.name),

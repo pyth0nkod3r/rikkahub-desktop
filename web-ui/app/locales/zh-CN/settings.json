@@ -64,7 +64,8 @@
       "webdav": "坚果云,网盘,云备份,同步",
       "s3": "对象存储,R2,OSS,COS,MinIO,云备份",
       "web_password": "登录,鉴权,密码,Docker,安全",
-      "update": "升级,新版本"
+      "update": "升级,新版本",
+      "subagents": "子智能体,智能体,多智能体,委派,专家,协同"
     }
   },
   "subnav": {
@@ -85,7 +86,8 @@
       "mcp": "MCP",
       "skills": "技能",
       "injection": "提示词注入",
-      "quick": "快捷消息模板"
+      "quick": "快捷消息模板",
+      "subagents": "子智能体"
     },
     "personalization": {
       "appearance": "外观",
@@ -1287,5 +1289,37 @@
     "preview_en_text": "The quick brown fox jumps 0123456789",
     "preview_cjk_text": "山映斜阳天接水，芳草无情，更在斜阳外。",
     "preview_mixed_text": "Hello 你好，这是 RikkaHub 2026 年的测试 Test 测试。"
+  },
+  "subagents": {
+    "subtitle": "管理专业子智能体配置方案、授权工具能力边界及并发执行流水。",
+    "tab_profiles": "配置方案",
+    "tab_runs": "运行流水",
+    "add_profile": "添加子智能体方案",
+    "new_profile": "新建子智能体",
+    "empty_profiles": "尚未配置任何子智能体方案。",
+    "detail_subtitle": "子智能体专属配置与边界",
+    "general_title": "身份与提示词",
+    "name_label": "方案名称",
+    "desc_label": "功能描述",
+    "model_label": "专属模型",
+    "inherit_model": "继承自主助手的模型",
+    "enabled_label": "启用此方案",
+    "system_prompt_label": "专属系统提示词",
+    "capabilities_title": "授权能力集",
+    "caps_desc": "子智能体默认仅在工作区沙盒内运行。若需赋予更多特权，请在下方勾选授权能力套件：",
+    "saved": "子智能体方案已保存",
+    "deleted": "方案已删除",
+    "confirm_delete": "确认删除此子智能体方案？",
+    "no_selected": "未选择子智能体方案",
+    "select_or_create": "从左侧列表选择一个方案，或点击新建按钮创建。",
+    "runs_recorded": "条运行记录在册",
+    "col_status": "状态",
+    "col_label": "任务简述",
+    "col_mode": "模式",
+    "col_started": "启动时间",
+    "col_actions": "操作",
+    "cancel": "取消运行",
+    "cancelled": "子智能体运行已中止",
+    "no_runs": "暂无子智能体运行记录。"
   }
 }

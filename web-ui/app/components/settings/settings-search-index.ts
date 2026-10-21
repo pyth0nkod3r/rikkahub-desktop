@@ -70,6 +70,7 @@ const PAGE_KEYWORDS: Partial<Record<SettingsPageKey, string>> = {
   "extensions/skills": "skills",
   "extensions/injection": "injection",
   "extensions/quick": "quick",
+  "extensions/subagents": "subagents",
   "personalization/appearance": "appearance",
   "personalization/shortcuts": "shortcuts",
   "speech/tts": "tts",
@@ -214,6 +215,13 @@ const ROW_ENTRIES: readonly SettingsSearchEntry[] = [
   row("extensions/injection", "mcp.inject_content", { tab: MODE_TAB }),
   row("extensions/injection", "mcp.priority", { advanced: true, tab: MODE_TAB }),
   row("extensions/injection", "mcp.lorebook.enable", { advanced: true, tab: LOREBOOK_TAB }),
+  row("extensions/subagents", "subagents.general_title"),
+  row("extensions/subagents", "subagents.name_label"),
+  row("extensions/subagents", "subagents.desc_label"),
+  row("extensions/subagents", "subagents.model_label"),
+  row("extensions/subagents", "subagents.enabled_label"),
+  row("extensions/subagents", "subagents.system_prompt_label"),
+  row("extensions/subagents", "subagents.capabilities_title"),
 
   // 个性化
   row("personalization/appearance", "general.font_title"),

@@ -5,6 +5,8 @@ import {
   AudioLines,
   BookHeart,
   BookX,
+  Bot,
+  ChevronDown,
   Check,
   Clipboard,
   ClipboardList,
@@ -26,6 +28,8 @@ import {
 
 import Markdown from "~/components/markdown/markdown";
 import { HighlightedCode } from "~/components/markdown/code-block";
+import api from "~/services/api";
+import { toast } from "sonner";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { DetailDrawer } from "~/components/detail-drawer";
@@ -84,6 +88,10 @@ const TOOL_NAMES = {
   ASK_USER: "ask_user",
   USE_SKILL: "use_skill",
   PROPOSE_PLAN: "propose_plan",
+  SUBAGENT_DISPATCH: "subagent_dispatch",
+  SUBAGENT_LIST: "subagent_list",
+  SUBAGENT_GET: "subagent_get",
+  SUBAGENT_CANCEL: "subagent_cancel",
 } as const;
 
 const MEMORY_ACTIONS = {
@@ -290,6 +298,7 @@ function getToolIcon(toolName: string, action?: string) {
   if (toolName === TOOL_NAMES.ASK_USER) return MessageCircleQuestion;
   if (toolName === TOOL_NAMES.USE_SKILL) return Sparkles;
   if (toolName === TOOL_NAMES.PROPOSE_PLAN) return ClipboardList;
+  if (toolName.startsWith("subagent_")) return Bot;
 
   return Wrench;
 }
@@ -327,6 +336,13 @@ function getToolTitle(toolName: string, args: unknown, t: TFunction): string {
 
   if (toolName === TOOL_NAMES.ASK_USER) return t("tool_part.ask_user_title");
   if (toolName === TOOL_NAMES.PROPOSE_PLAN) return t("tool_part.propose_plan_title");
+  if (toolName === TOOL_NAMES.SUBAGENT_DISPATCH) {
+    const label = getStringField(args, "label") || getStringField(args, "task");
+    return label ? t("tool_part.subagent_dispatch_with_label", { label }) : t("tool_part.subagent_dispatch");
+  }
+  if (toolName === TOOL_NAMES.SUBAGENT_LIST) return t("tool_part.subagent_list");
+  if (toolName === TOOL_NAMES.SUBAGENT_GET) return t("tool_part.subagent_get");
+  if (toolName === TOOL_NAMES.SUBAGENT_CANCEL) return t("tool_part.subagent_cancel");
 
   if (toolName === TOOL_NAMES.USE_SKILL) {
     const skillName = getStringField(args, "name");
@@ -892,6 +908,145 @@ function ProposePlanToolStep({
   );
 }
 
+
+function SubAgentDispatchToolStep({
+  tool,
+  loading,
+}: ToolPartProps) {
+  const { t } = useTranslation("message");
+  const args = React.useMemo(() => safeJsonParse(tool.input) as Record<string, unknown> | null, [tool.input]);
+  const task = getStringField(args, "task") || "";
+  const label = getStringField(args, "label") || task.slice(0, 50);
+  const agent = getStringField(args, "agent") || "";
+  const isBackground = Boolean(args?.run_in_background);
+
+  const outputText = React.useMemo(
+    () =>
+      tool.output
+        .filter((part): part is UITextPart => part.type === "text")
+        .map((part) => part.text)
+        .join("\n"),
+    [tool.output],
+  );
+  const outputObj = React.useMemo(() => safeJsonParse(outputText) as Record<string, unknown> | null, [outputText]);
+
+  const status = String(outputObj?.status ?? (loading ? "running" : "completed"));
+  const resultText = typeof outputObj?.result === "string" ? outputObj.result : null;
+  const errorText = typeof outputObj?.error === "string" ? outputObj.error : null;
+  const runId = typeof outputObj?.id === "string" ? outputObj.id : null;
+
+  const [expanded, setExpanded] = React.useState(false);
+  const [cancelling, setCancelling] = React.useState(false);
+
+  const handleCancel = async () => {
+    if (!runId) return;
+    setCancelling(true);
+    try {
+      await api.post(`subagents/runs/${runId}/cancel`, {});
+      toast.success(t("tool_part.subagent_cancelled", "Sub-agent cancelled"));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  const isRunning = status === "running" || status === "pending" || loading;
+  const isSucceeded = status === "succeeded";
+  const isFailed = status === "failed" || status === "timed_out";
+  const isCancelled = status === "cancelled";
+
+  return (
+    <div className="my-2 overflow-hidden rounded-xl border border-border/70 bg-card p-3 shadow-sm">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <Bot className="h-4 w-4" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="font-medium text-xs truncate max-w-[200px] sm:max-w-xs">{label}</span>
+              {agent && (
+                <span className="rounded-full bg-secondary px-1.5 py-0.5 text-[10px] font-medium text-secondary-foreground">
+                  {agent}
+                </span>
+              )}
+              {isBackground && (
+                <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                  Background
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          {isRunning ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-[11px] font-medium text-primary animate-pulse">
+              <span className="size-1.5 rounded-full bg-primary" />
+              Running
+            </span>
+          ) : isSucceeded ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+              <Check className="h-3 w-3" />
+              Finished
+            </span>
+          ) : isFailed ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-destructive/15 px-2 py-0.5 text-[11px] font-medium text-destructive">
+              <X className="h-3 w-3" />
+              Failed
+            </span>
+          ) : isCancelled ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+              Cancelled
+            </span>
+          ) : null}
+
+          {isRunning && runId && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-1.5 text-[11px] text-destructive hover:bg-destructive/10"
+              onClick={handleCancel}
+              disabled={cancelling}
+            >
+              Cancel
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {task && task !== label && (
+        <p className="mt-1.5 text-xs text-muted-foreground line-clamp-2">{task}</p>
+      )}
+
+      {errorText && (
+        <div className="mt-2 rounded-lg bg-destructive/10 p-2 text-xs text-destructive">
+          {errorText}
+        </div>
+      )}
+
+      {resultText && (
+        <div className="mt-2 border-t pt-2">
+          <button
+            type="button"
+            onClick={() => setExpanded(!expanded)}
+            className="flex w-full items-center justify-between text-[11px] font-medium text-muted-foreground hover:text-foreground"
+          >
+            <span>{expanded ? "Hide sub-agent findings" : "Show sub-agent findings"}</span>
+            <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded ? "rotate-180" : ""}`} />
+          </button>
+          {expanded && (
+            <div className="mt-1.5 rounded-lg bg-muted/30 p-2.5 text-xs whitespace-pre-wrap leading-relaxed max-h-60 overflow-y-auto">
+              {resultText}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ToolPart({
   tool,
   loading = false,
@@ -902,6 +1057,20 @@ export function ToolPart({
   isFirst,
   isLast,
 }: ToolPartProps) {
+  if (tool.toolName === TOOL_NAMES.SUBAGENT_DISPATCH) {
+    return (
+      <SubAgentDispatchToolStep
+        tool={tool}
+        loading={loading}
+        messageCreatedAt={messageCreatedAt}
+        messageFinishedAt={messageFinishedAt}
+        awaitingApproval={awaitingApproval}
+        onToolApproval={onToolApproval}
+        isFirst={isFirst}
+        isLast={isLast}
+      />
+    );
+  }
   if (tool.toolName === TOOL_NAMES.PROPOSE_PLAN) {
     return (
       <ProposePlanToolStep

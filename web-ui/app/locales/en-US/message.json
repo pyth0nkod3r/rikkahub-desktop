@@ -150,7 +150,13 @@
     "propose_plan_approved_badge": "Plan Accepted (Build Mode Active)",
     "propose_plan_declined_badge": "Plan Declined",
     "propose_plan_steps": "Steps ({{count}})",
-    "propose_plan_details": "Plan Details"
+    "propose_plan_details": "Plan Details",
+    "subagent_dispatch": "Dispatch Sub-Agent",
+    "subagent_dispatch_with_label": "Sub-Agent: {{label}}",
+    "subagent_list": "List Sub-Agents",
+    "subagent_get": "Get Sub-Agent Details",
+    "subagent_cancel": "Cancel Sub-Agent",
+    "subagent_cancelled": "Sub-agent run cancelled"
   },
   "media_part": {
     "video_load_failed": "Failed to load video: {{url}}",

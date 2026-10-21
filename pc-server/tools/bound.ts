@@ -11,6 +11,8 @@ import {
   openAiSkillTools as openAiSkillToolsCore,
 } from "./definitions";
 import { listSkills } from "./skills";
+import { openAiSubAgentTools } from "./subagent-tools";
+import { SubAgentToolPolicies } from "../subagents/policy";
 
 /** 外挂 search_web 的唯一注入源。带防双搜门控:模型已声明内置 search 时(自带
  *  googleSearch/web_search 服务端搜索),外挂让位不注入——判定走单源谓词
@@ -39,11 +41,24 @@ export function openAiMcpTools(assistant: Assistant) {
  *  pi-engine/workspace-tools 承载),不可用时旧挂载本就返回空,两头皆死代码。
  *  model 用于防双搜门控(见 openAiSearchTools):调用方在聊天引擎各装配点都能拿到
  *  picked.model/modelItem,务必传入以启用外挂让位;缺省则退化为只看全局开关。 */
-export function conversationFunctionTools(assistant: Assistant, model?: Model | null) {
-  return [
+export function openAiSubAgents() {
+  return openAiSubAgentTools();
+}
+
+export function conversationFunctionTools(
+  assistant: Assistant,
+  model?: Model | null,
+  conversationId?: string | null,
+) {
+  const tools = [
     ...openAiSearchTools(model),
     ...openAiLocalTools(assistant),
     ...openAiSkillTools(assistant),
     ...openAiMcpTools(assistant),
+    ...openAiSubAgents(),
   ];
+  if (conversationId && SubAgentToolPolicies.isSubAgent(conversationId)) {
+    return SubAgentToolPolicies.filter(conversationId, tools, (t) => t.function.name);
+  }
+  return tools;
 }

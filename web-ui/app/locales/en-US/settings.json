@@ -64,7 +64,8 @@
       "webdav": "cloud drive,cloud backup,sync",
       "s3": "object storage,R2,OSS,MinIO,cloud backup",
       "web_password": "login,auth,password,Docker,security",
-      "update": "upgrade,new version"
+      "update": "upgrade,new version",
+      "subagents": "sub-agent,agent,harness,delegation,multi-agent,specialist"
     }
   },
   "subnav": {
@@ -85,7 +86,8 @@
       "mcp": "MCP",
       "skills": "Skills",
       "injection": "Prompt injection",
-      "quick": "Quick message templates"
+      "quick": "Quick message templates",
+      "subagents": "Sub-Agents"
     },
     "personalization": {
       "appearance": "Appearance",
@@ -1287,5 +1289,37 @@
     "preview_en_text": "The quick brown fox jumps 0123456789",
     "preview_cjk_text": "山映斜阳天接水，芳草无情，更在斜阳外。",
     "preview_mixed_text": "Hello 你好, RikkaHub 2026 mixed-script Test 测试."
+  },
+  "subagents": {
+    "subtitle": "Manage specialist sub-agent profiles, granted capability boundaries, and execution runs.",
+    "tab_profiles": "Profiles",
+    "tab_runs": "Active Runs",
+    "add_profile": "Add Sub-Agent Profile",
+    "new_profile": "New Sub-Agent",
+    "empty_profiles": "No sub-agent profiles configured yet.",
+    "detail_subtitle": "Sub-agent configuration",
+    "general_title": "Identity & Prompt",
+    "name_label": "Profile Name",
+    "desc_label": "Description",
+    "model_label": "Assigned Model",
+    "inherit_model": "Inherit from parent assistant",
+    "enabled_label": "Enabled",
+    "system_prompt_label": "Custom System Prompt",
+    "capabilities_title": "Granted Capabilities",
+    "caps_desc": "Sub-agents operate in a restricted workspace sandbox by default. Grant opt-in capability suites below:",
+    "saved": "Sub-agent profile saved",
+    "deleted": "Profile deleted",
+    "confirm_delete": "Delete this sub-agent profile?",
+    "no_selected": "No sub-agent profile selected",
+    "select_or_create": "Select a profile from the left or create a new one.",
+    "runs_recorded": "runs recorded in ledger",
+    "col_status": "Status",
+    "col_label": "Label / Task",
+    "col_mode": "Mode",
+    "col_started": "Started",
+    "col_actions": "Actions",
+    "cancel": "Cancel",
+    "cancelled": "Sub-agent run cancelled",
+    "no_runs": "No sub-agent runs recorded yet."
   }
 }

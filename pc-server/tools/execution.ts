@@ -20,6 +20,8 @@ import { runAskUserTool, runClipboardTool, runGetTimeInfoTool, runTextToSpeechTo
 import { readSkillBody, safeSkillFile } from "./skills";
 import { isWorkspaceToolName } from "../workspace/approval";
 import { runWorkspaceTool } from "../workspace/runtime";
+import { SubAgentToolPolicies } from "../subagents/policy";
+import { executeSubAgentTool } from "./subagent-tools";
 
 /** save_memory 工具执行(1.3.2)。模型只提议 content,应用按 writeStrategy 决定落地方式:
  *  - always_assistant + 助手层启用 → 直接存助手层
@@ -79,6 +81,15 @@ export async function executeToolCall(
     args = parsedArgs as Record<string, JsonValue>;
   } catch (err) {
     throw new Error(`Invalid tool arguments JSON for ${name}: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  if (context?.conversationId && !SubAgentToolPolicies.permits(context.conversationId, name)) {
+    throw new Error(`Tool '${name}' is not permitted in this sub-agent run.`);
+  }
+  if (name.startsWith("subagent_")) {
+    return executeSubAgentTool(name, args, {
+      conversationId: context?.conversationId,
+      assistantId: assistant.id,
+    });
   }
   if (name === "save_memory") return runSaveMemoryTool(assistant, args, context);
   // 工作区工具（pi 移植层）：会话必须绑定工作区，守卫链在 runtime 内（同 search_web

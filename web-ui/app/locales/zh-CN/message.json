@@ -150,7 +150,13 @@
     "propose_plan_approved_badge": "计划已批准 (已切至建造模式)",
     "propose_plan_declined_badge": "计划已拒绝",
     "propose_plan_steps": "执行步骤 ({{count}})",
-    "propose_plan_details": "详细计划"
+    "propose_plan_details": "详细计划",
+    "subagent_dispatch": "委派子智能体",
+    "subagent_dispatch_with_label": "子智能体: {{label}}",
+    "subagent_list": "查询子智能体列表",
+    "subagent_get": "获取子智能体详情",
+    "subagent_cancel": "中止子智能体",
+    "subagent_cancelled": "子智能体运行已中止"
   },
   "media_part": {
     "video_load_failed": "加载视频失败：{{url}}",
