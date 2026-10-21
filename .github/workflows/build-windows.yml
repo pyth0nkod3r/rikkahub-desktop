@@ -68,7 +68,7 @@ jobs:
           cd web-ui
           bun install --frozen-lockfile
           bun run build
-          cargo tauri build
+          bun run tauri build
 
       - name: Package Portable Zip
         shell: pwsh
