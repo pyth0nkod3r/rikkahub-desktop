@@ -87,6 +87,8 @@
     "extensions": {
       "mcp": "MCP",
       "skills": "技能",
+      "workspace": "工作区与沙箱终端",
+      "browser": "浏览器自动化 (CDP)",
       "injection": "提示词注入",
       "quick": "快捷消息模板",
       "subagents": "子智能体",

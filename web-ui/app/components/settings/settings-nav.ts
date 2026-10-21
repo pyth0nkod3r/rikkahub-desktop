@@ -72,6 +72,8 @@ export const SETTINGS_NAV = [
     children: [
       { id: "mcp", labelKey: "settings:subnav.extensions.mcp" },
       { id: "skills", labelKey: "settings:subnav.extensions.skills" },
+      { id: "workspace", labelKey: "settings:subnav.extensions.workspace" },
+      { id: "browser", labelKey: "settings:subnav.extensions.browser" },
       { id: "injection", labelKey: "settings:subnav.extensions.injection" },
       { id: "quick", labelKey: "settings:subnav.extensions.quick" },
       { id: "subagents", labelKey: "settings:subnav.extensions.subagents" },

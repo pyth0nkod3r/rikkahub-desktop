@@ -8,24 +8,28 @@ import * as React from "react";
 import type { SlashCommandDto } from "~/lib/slash-commands";
 import api from "~/services/api";
 
-const EMPTY: SlashCommandDto[] = [];
+const DEFAULT_COMMANDS: SlashCommandDto[] = [
+  { name: "plan", hasArgument: false, executionTarget: "server" },
+  { name: "build", hasArgument: false, executionTarget: "server" },
+  { name: "compact", hasArgument: true, executionTarget: "server" },
+];
 
 export function useAvailableCommands(conversationId: string | null): SlashCommandDto[] {
-  const [commands, setCommands] = React.useState<SlashCommandDto[]>(EMPTY);
+  const [commands, setCommands] = React.useState<SlashCommandDto[]>(DEFAULT_COMMANDS);
 
   React.useEffect(() => {
     if (!conversationId) {
-      setCommands(EMPTY);
+      setCommands(DEFAULT_COMMANDS);
       return;
     }
     let cancelled = false;
     api
       .get<{ commands?: SlashCommandDto[] }>(`commands?conversationId=${encodeURIComponent(conversationId)}`)
       .then((result) => {
-        if (!cancelled) setCommands(result.commands ?? EMPTY);
+        if (!cancelled) setCommands(result.commands && result.commands.length > 0 ? result.commands : DEFAULT_COMMANDS);
       })
       .catch(() => {
-        if (!cancelled) setCommands(EMPTY);
+        if (!cancelled) setCommands(DEFAULT_COMMANDS);
       });
     return () => {
       cancelled = true;

@@ -1829,8 +1829,34 @@ const ConversationPaneView = React.memo(function ConversationPaneView({
         }
         await performCompress({ additionalPrompt: argument }, "/compact ");
       },
+      plan: async () => {
+        if (!activeId) {
+          toast.info("Switched to Plan Mode 📋");
+          return;
+        }
+        try {
+          await api.post(`conversations/${activeId}/agent-mode`, { mode: "plan" });
+          await refreshList();
+          toast.success("Switched to Plan Mode 📋 (Read-only analysis & plan proposal)");
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : "Failed to switch mode");
+        }
+      },
+      build: async () => {
+        if (!activeId) {
+          toast.info("Switched to Build Mode 🔨");
+          return;
+        }
+        try {
+          await api.post(`conversations/${activeId}/agent-mode`, { mode: "build" });
+          await refreshList();
+          toast.success("Switched to Build Mode 🔨 (Full execution unlocked)");
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : "Failed to switch mode");
+        }
+      },
     }),
-    [compressing, performCompress, t],
+    [activeId, compressing, performCompress, refreshList, t],
   );
   // 防两表漂移(方案 §3.1):服务端说可用但前端无执行器的指令不展示,并留痕便于排查。
   const slashCommands = React.useMemo(() => {

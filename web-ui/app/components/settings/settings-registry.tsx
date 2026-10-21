@@ -13,6 +13,8 @@ import { BackupSection } from "~/components/settings/data/backup";
 import { WebServiceSection } from "~/components/settings/data/web-service";
 import { DefaultModelsSection } from "~/components/settings/default-models";
 import { McpSection } from "~/components/settings/extensions/mcp";
+import { WorkspaceSection } from "~/components/settings/extensions/workspace";
+import { BrowserSection } from "~/components/settings/extensions/browser";
 import { PromptInjectionSection } from "~/components/settings/extensions/injection";
 import { QuickMessagesSection } from "~/components/settings/extensions/quick-messages";
 import { SkillsSection } from "~/components/settings/extensions/skills";
@@ -93,6 +95,8 @@ export const SETTINGS_PAGES: Record<SettingsPageKey, React.ComponentType<Setting
   "network/port": PortRequestSection,
   "extensions/mcp": McpSection,
   "extensions/skills": SkillsSection,
+  "extensions/workspace": WorkspaceSection,
+  "extensions/browser": BrowserSection,
   "extensions/injection": PromptInjectionSection,
   "extensions/quick": QuickMessagesSection,
   "extensions/subagents": SubAgentsSection,

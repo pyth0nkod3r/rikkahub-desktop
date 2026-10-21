@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { useCurrentAssistant } from "~/hooks/use-current-assistant";
 import { ModelList } from "~/components/input/model-list";
 import { SearchPickerButton } from "~/components/input/search-picker";
+import { AgentModePicker, AgentPlanModeBanner } from "~/components/input/agent-mode-picker";
 import { MemoryBadge } from "~/components/memory/memory-badge";
 import { ExtensionPickerButton } from "~/components/input/extension-picker";
 import { CommandHighlightOverlay, SlashCommandMenu, TEXTAREA_METRICS } from "~/components/input/slash-command-menu";
@@ -810,6 +811,8 @@ function ChatInputInner({
             <MemoryBadge />
           </div>
 
+          <AgentPlanModeBanner conversationId={conversationId} />
+
           {isEditing ? (
             <div className="flex items-center justify-between rounded-xl border border-primary/30 bg-primary/5 px-3 py-2 text-xs">
               <span className="text-primary">{t("chat.editing_tip")}</span>
@@ -1035,6 +1038,7 @@ function ChatInputInner({
                   <PhoneCall className="size-4" />
                 </Button>
               ) : null}
+              <AgentModePicker conversationId={conversationId} disabled={isGenerating || disabled} />
               <SearchPickerButton disabled={!canSwitchModel} />
               <ExtensionPickerButton disabled={!canSwitchModel} />
               <WorkspaceFilesButton />

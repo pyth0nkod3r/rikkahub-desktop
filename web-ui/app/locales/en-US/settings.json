@@ -87,6 +87,8 @@
     "extensions": {
       "mcp": "MCP",
       "skills": "Skills",
+      "workspace": "Workspace & Shell Sandbox",
+      "browser": "Browser Automation",
       "injection": "Prompt injection",
       "quick": "Quick message templates",
       "subagents": "Sub-Agents",

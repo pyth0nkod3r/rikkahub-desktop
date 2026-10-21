@@ -240,6 +240,11 @@ const ROW_ENTRIES: readonly SettingsSearchEntry[] = [
   row("extensions/remote", "remote.ssh_label_label"),
   row("extensions/remote", "remote.ssh_host_label"),
   row("extensions/remote", "remote.ssh_user_label"),
+  literal("extensions/workspace", "Shell Access & Execution"),
+  literal("extensions/workspace", "Multi-Tier Sandboxing"),
+  literal("extensions/workspace", "Configured Workspaces"),
+  literal("extensions/browser", "CDP Headless Web Driver"),
+  literal("extensions/browser", "Agent Browser Tools"),
 
   // 个性化
   row("personalization/appearance", "general.font_title"),
