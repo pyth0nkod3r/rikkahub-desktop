@@ -32,7 +32,8 @@ import { findDangerousCommandReason, isWorkspaceToolName, type WorkspaceToolName
 import { createReadTool } from "./tools/read";
 import { createWriteTool } from "./tools/write";
 import { createEditTool } from "./tools/edit";
-import { createBashTool, createLocalBashOperations, type BashOperations, type BashToolInput } from "./tools/bash";
+import { createBashTool, type BashOperations, type BashToolInput } from "./tools/bash";
+import { createSandboxedBashOperations } from "./sandboxing/runners";
 import { sweepWorkspaceReservedNameArtifacts } from "./files";
 import { createGrepTool } from "./tools/grep";
 import { createFindTool } from "./tools/find";
@@ -160,7 +161,13 @@ function buildWorkspaceTool(
         shellPath,
         // 问题4(2.0.0 内测):bash 命令或其派生原生进程(如 bun 的 node:fs 相对路径写)
         // 可能在 cwd 落下 Windows 保留设备名残留文件,执行后清扫出生点。
-        operations: withReservedNameSweep(createLocalBashOperations({ shellPath })),
+        operations: withReservedNameSweep(
+          createSandboxedBashOperations(runtime.workspace.sandboxBackend || "local", {
+            shellPath,
+            wslDistro: runtime.workspace.sandboxBackend === "wsl" ? runtime.workspace.sandboxImage || undefined : undefined,
+            dockerImage: runtime.workspace.sandboxBackend === "docker" ? runtime.workspace.sandboxImage || undefined : undefined,
+          }),
+        ),
       }) as WorkspaceToolDefinition<unknown, unknown>;
     }
     case "grep":

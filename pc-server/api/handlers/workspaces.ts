@@ -7,6 +7,7 @@ import { createWorkspace, deleteWorkspace, getWorkspace, listWorkspaces, trustWo
 import { deleteWorkspaceEntry, listWorkspaceDir, previewWorkspaceFile, readWorkspaceAgentsFile, renameWorkspaceEntry, revealWorkspaceEntry, writeWorkspaceAgentsFile } from "../../workspace/files";
 import { mountedWorkspaceToolNames, refreshShellAvailability, shellAvailability } from "../../workspace/runtime";
 import { error, json, readJson } from "../request";
+import { getSandboxStatus } from "../../workspace/sandboxing/detect";
 
 export function shellStatusPayload(): { available: boolean; error: string | null; mountedTools: string[] } {
   const shell = shellAvailability();
@@ -22,12 +23,16 @@ export async function handleWorkspaceRoutes(request: Request, _url: URL, path: s
     return json({ workspaces: listWorkspaces().map(toDto) });
   }
 
+  if (path === "workspaces/sandbox-backends" && request.method === "GET") {
+    return json(getSandboxStatus());
+  }
+
   if (path === "workspaces" && request.method === "POST") {
-    const body = await readJson<{ type?: string; name?: string; root?: string }>(request);
+    const body = await readJson<{ type?: string; name?: string; root?: string; sandboxBackend?: import("../../foundation/types").SandboxBackend; sandboxImage?: string }>(request);
     const type = String(body.type ?? "");
     if (type !== "managed" && type !== "folder") return error("type must be managed or folder", 400);
     try {
-      return json({ workspace: toDto(createWorkspace({ type, name: body.name, root: body.root })) });
+      return json({ workspace: toDto(createWorkspace({ type, name: body.name, root: body.root, sandboxBackend: body.sandboxBackend, sandboxImage: body.sandboxImage })) });
     } catch (err) {
       return error(err instanceof Error ? err.message : "创建工作区失败", 400);
     }
@@ -56,7 +61,7 @@ export async function handleWorkspaceRoutes(request: Request, _url: URL, path: s
 
   if (!sub && request.method === "PATCH") {
     // B6-①b:root 仅 folder 型可重绑(校验+信任门重置在领域层),managed 型传 root 会抛错。
-    const body = await readJson<{ name?: string; permissionPreset?: string; root?: string }>(request);
+    const body = await readJson<{ name?: string; permissionPreset?: string; root?: string; sandboxBackend?: string; sandboxImage?: string }>(request);
     try {
       const updated = updateWorkspace(workspaceId, body);
       if (!updated) return error("Workspace not found", 404);

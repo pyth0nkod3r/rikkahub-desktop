@@ -399,6 +399,7 @@ export function upsertConversationRowInto(db: InstanceType<typeof Database>, con
     conv.workspaceId ?? null,
     conv.workspaceCwd ?? null,
     conv.engineCompactions?.length ? JSON.stringify(conv.engineCompactions) : null,
+    conv.agentMode || "build",
   );
 }
 

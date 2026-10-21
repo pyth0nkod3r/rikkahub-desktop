@@ -343,6 +343,8 @@ export type WorkspacePermissionPreset = "confirm_each" | "balanced" | "full_acce
 /** 运行时健康状态(计算属性,不落库):missing = 根目录丢失(对齐安卓 BROKEN 语义,不静默删记录)。 */
 export type WorkspaceStatus = "ready" | "missing";
 
+export type SandboxBackend = "local" | "wsl" | "docker";
+
 export interface Workspace {
   id: string;
   name: string;
@@ -356,6 +358,8 @@ export interface Workspace {
   createAt: number;
   updateAt: number;
   lastAccessAt: number;
+  sandboxBackend?: SandboxBackend;
+  sandboxImage?: string | null;
 }
 
 export interface PcWorkspaceRow {
@@ -368,6 +372,8 @@ export interface PcWorkspaceRow {
   create_at: number;
   update_at: number;
   last_access_at: number;
+  sandbox_backend?: string | null;
+  sandbox_image?: string | null;
 }
 
 export interface RequestLog {

@@ -206,7 +206,16 @@
       "missing_hint": "This folder can't be found. Rebind to a new folder (trust authorization is required again after rebinding)",
       "rebind": "Rebind",
       "rebind_failed": "Failed to rebind workspace",
-      "rebind_notice": "Path changed — trust authorization is required again after saving"
+      "rebind_notice": "Path changed — trust authorization is required again after saving",
+      "sandbox_label": "Sandbox Environment (PRoot Equivalence)",
+      "sandbox_hint": "Select where workspace bash commands execute. Tier 2 (WSL2) and Tier 3 (Docker) isolate commands from your host Windows system.",
+      "sandbox_local": "Host Shell (MSYS2 / Git Bash)",
+      "sandbox_wsl": "WSL2 Linux Distro (Tier 2 RootFS Sandbox)",
+      "sandbox_docker": "Docker Container (Tier 3 Sealed Sandbox)",
+      "sandbox_distro_label": "WSL2 Distribution",
+      "sandbox_distro_placeholder": "e.g. kali-linux, Ubuntu",
+      "sandbox_image_label": "Docker Container Image",
+      "sandbox_image_placeholder": "e.g. ubuntu:latest, python:3.11"
     },
     "shell": {
       "title": "No usable bash shell found",

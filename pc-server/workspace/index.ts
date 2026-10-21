@@ -22,6 +22,21 @@ const WORKSPACE_NAME_MAX = 80;
 // 会话库不感知工作区。懒建对活库损坏重建路径同样免疫——重建后的新 Database 实例
 // 不在 WeakSet 里,首次访问自动补建。
 
+function ensureWorkspaceSandboxColumns(handle: Database): void {
+  try {
+    const cols = handle.prepare("PRAGMA table_info(pc_workspace)").all() as { name: string }[];
+    const names = new Set(cols.map((c) => c.name));
+    if (!names.has("sandbox_backend")) {
+      handle.exec("ALTER TABLE pc_workspace ADD COLUMN sandbox_backend TEXT NOT NULL DEFAULT 'local'");
+    }
+    if (!names.has("sandbox_image")) {
+      handle.exec("ALTER TABLE pc_workspace ADD COLUMN sandbox_image TEXT DEFAULT ''");
+    }
+  } catch (err) {
+    console.warn("[workspace-db] error ensuring sandbox columns:", err);
+  }
+}
+
 const ensuredDbs = new WeakSet<Database>();
 
 function db(): Database {
@@ -41,6 +56,7 @@ function db(): Database {
         last_access_at    INTEGER NOT NULL
       );
     `);
+    ensureWorkspaceSandboxColumns(handle);
     ensuredDbs.add(handle);
   }
   return handle;
@@ -90,6 +106,8 @@ function rowToWorkspace(row: PcWorkspaceRow): Workspace {
     createAt: row.create_at,
     updateAt: row.update_at,
     lastAccessAt: row.last_access_at,
+    sandboxBackend: (row.sandbox_backend as import("../foundation/types").SandboxBackend) || "local",
+    sandboxImage: row.sandbox_image || null,
   };
 }
 
@@ -185,7 +203,7 @@ function nextManagedWorkspaceName(): string {
   }
 }
 
-export function createWorkspace(input: { type: WorkspaceType; name?: unknown; root?: unknown }): Workspace {
+export function createWorkspace(input: { type: WorkspaceType; name?: unknown; root?: unknown; sandboxBackend?: import("../foundation/types").SandboxBackend; sandboxImage?: string }): Workspace {
   const now = Date.now();
   const workspaceId = newId();
   let root = "";
@@ -213,8 +231,8 @@ export function createWorkspace(input: { type: WorkspaceType; name?: unknown; ro
   if (input.type === "managed") mkdirSync(managedRoot(workspaceId), { recursive: true });
 
   db().prepare(
-    "INSERT INTO pc_workspace (id, name, type, root, permission_preset, trusted_at, create_at, update_at, last_access_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-  ).run(workspaceId, name, input.type, input.type === "folder" ? root : "", preset, trustedAt, now, now, now);
+    "INSERT INTO pc_workspace (id, name, type, root, permission_preset, trusted_at, create_at, update_at, last_access_at, sandbox_backend, sandbox_image) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  ).run(workspaceId, name, input.type, input.type === "folder" ? root : "", preset, trustedAt, now, now, now, input.sandboxBackend || "local", input.sandboxImage || "");
   const created = getWorkspace(workspaceId);
   if (!created) throw new Error("workspace insert failed");
   return created;
@@ -224,7 +242,7 @@ export function createWorkspace(input: { type: WorkspaceType; name?: unknown; ro
  * 指向的目录可换)。managed 型 root 由 dataDir 派生、不落库,不可改绑。
  * folder 型重绑新目录后重置信任门(trusted_at 置空,待用户重确认)——新目录是新边界,
  * 沿用旧信任等于让模型静默获得一片未授权目录的读写权。 */
-export function updateWorkspace(workspaceId: string, patch: { name?: unknown; permissionPreset?: unknown; root?: unknown }): Workspace | null {
+export function updateWorkspace(workspaceId: string, patch: { name?: unknown; permissionPreset?: unknown; root?: unknown; sandboxBackend?: unknown; sandboxImage?: unknown }): Workspace | null {
   const existing = getWorkspace(workspaceId);
   if (!existing) return null;
   const name = patch.name !== undefined ? sanitizeName(patch.name, existing.name) : existing.name;

@@ -37,6 +37,7 @@ import {
   CreateFolderWorkspaceDialog,
   WorkspaceTrustDialog,
 } from "~/components/workspace/workspace-create-dialogs";
+import { WorkspaceEditDialog } from "~/components/workspace/workspace-edit-dialog";
 import api from "~/services/api";
 import {
   CHAT_CONTAINER,
@@ -118,10 +119,6 @@ export function ContainerTabBar({
   const [trustTarget, setTrustTarget] = React.useState<{ workspace: WorkspaceDto; fromCreate: boolean } | null>(null);
   // R7 工作区管理:重命名对话框目标 + 输入值(提交 PATCH workspaces/:id)。
   const [renameTarget, setRenameTarget] = React.useState<WorkspaceDto | null>(null);
-  const [renameValue, setRenameValue] = React.useState("");
-  const [renameSaving, setRenameSaving] = React.useState(false);
-  // B6-①b:编辑对话里 folder 型路径可重绑。renameRoot 是编辑中的路径草稿(初始=当前 root)。
-  const [renameRoot, setRenameRoot] = React.useState("");
 
   React.useEffect(() => {
     void refresh();
@@ -211,49 +208,10 @@ export function ContainerTabBar({
     [t],
   );
 
-  const submitRename = React.useCallback(async () => {
-    if (!renameTarget) return;
-    const name = renameValue.trim();
-    // B6-①b:folder 型且路径被改动 → 一并提交 root(后端重绑 + 信任门重置)。
-    const root = renameTarget.type === "folder" ? renameRoot.trim() : "";
-    const nameChanged = !!name && name !== renameTarget.name;
-    const rootChanged = renameTarget.type === "folder" && !!root && root !== renameTarget.root;
-    if (!nameChanged && !rootChanged) {
-      setRenameTarget(null);
-      return;
-    }
-    setRenameSaving(true);
-    try {
-      await api.patch<{ workspace: WorkspaceDto }>(`workspaces/${renameTarget.id}`, {
-        ...(nameChanged ? { name } : {}),
-        ...(rootChanged ? { root } : {}),
-      });
-      await refresh();
-      setRenameTarget(null);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : t(rootChanged ? "workspace.menu.rebind_failed" : "workspace.menu.rename_failed"));
-    } finally {
-      setRenameSaving(false);
-    }
-  }, [refresh, renameTarget, renameValue, renameRoot, t]);
-
-  // B6-①b:打开编辑对话时同步名称与路径草稿(folder 型路径可重绑)。
   const openEditDialog = React.useCallback((workspace: WorkspaceDto) => {
-    setRenameValue(workspace.name);
-    setRenameRoot(workspace.root);
     setRenameTarget(workspace);
   }, []);
 
-  // B6-①b:目录选择器(Tauri);失败仅提示,不阻断手输路径。
-  const browseRenameRoot = React.useCallback(async () => {
-    try {
-      const { open: openPicker } = await import("@tauri-apps/plugin-dialog");
-      const picked = await openPicker({ directory: true, multiple: false });
-      if (typeof picked === "string" && picked) setRenameRoot(picked);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("workspace.create.pick_failed"));
-    }
-  }, [t]);
 
   // 激活容器前的信任门(§3.3):folder 型未信任(含设置里撤销信任后)先过门,
   // 授权成功才真正进入;拒绝仅关门,不删已有工作区。
@@ -375,85 +333,13 @@ export function ContainerTabBar({
 
       {headerTrailing}
 
-      {/* G3 编辑工作区:名称可编辑,路径只读可点选(资源管理器中显示) */}
-      <Dialog
+      <WorkspaceEditDialog
+        workspace={renameTarget}
         open={renameTarget !== null}
         onOpenChange={(open) => {
           if (!open) setRenameTarget(null);
         }}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{t("workspace.menu.edit_title")}</DialogTitle>
-          </DialogHeader>
-          {/* min-w-0:DialogContent 是 grid,不压住 auto 最小宽的话长路径会把格子撑出对话框 */}
-          <div className="min-w-0 space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-compact font-medium text-[var(--ds-text-secondary)]">
-                {t("workspace.menu.name_label")}
-              </label>
-              <Input
-                value={renameValue}
-                autoFocus
-                placeholder={t("workspace.menu.rename_placeholder")}
-                onChange={(event) => setRenameValue(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") void submitRename();
-                }}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-compact font-medium text-[var(--ds-text-secondary)]">
-                {t("workspace.menu.path_label")}
-              </label>
-              {renameTarget?.type === "folder" ? (
-                <>
-                  {/* B6-①b:folder 型路径可重绑。missing 态显示失效警告;改路径后提示需重新授权信任。 */}
-                  {renameTarget.status === "missing" ? (
-                    <div className="flex items-start gap-2 rounded-[var(--ds-radius-md)] bg-warning/10 px-3 py-2 text-xs text-warning">
-                      <TriangleAlert className="mt-0.5 size-3.5 shrink-0" strokeWidth={2} />
-                      <span>{t("workspace.menu.missing_hint")}</span>
-                    </div>
-                  ) : null}
-                  <div className="flex items-center gap-2">
-                    <Input
-                      value={renameRoot}
-                      onChange={(event) => setRenameRoot(event.target.value)}
-                      placeholder={t("workspace.create.folder_path_placeholder")}
-                      className="flex-1 font-mono text-compact"
-                    />
-                    <Button type="button" variant="outline" size="sm" onClick={() => void browseRenameRoot()}>
-                      <FolderSearch className="mr-1 size-4" />
-                      {t("workspace.create.browse")}
-                    </Button>
-                  </div>
-                  {renameRoot.trim() && renameRoot.trim() !== renameTarget.root ? (
-                    <div className="text-xs text-muted-foreground">{t("workspace.menu.rebind_notice")}</div>
-                  ) : null}
-                </>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => renameTarget && revealWorkspace(renameTarget)}
-                  aria-label={t("workspace.menu.reveal")}
-                  className="flex h-9 w-full min-w-0 max-w-full items-center gap-2 overflow-hidden rounded-[var(--ds-radius-md)] bg-[var(--ds-surface-input)] px-3 text-left text-compact text-[var(--ds-text-secondary)] shadow-[var(--ds-input-shadow)] transition-shadow hover:shadow-[var(--ds-input-shadow-hover)]"
-                >
-                  <FolderOpen className="size-4 shrink-0 text-[var(--ds-icon)]" strokeWidth={1.75} />
-                  <span className="min-w-0 flex-1 truncate">{renameTarget?.root}</span>
-                </button>
-              )}
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRenameTarget(null)}>
-              {t("workspace.create.cancel")}
-            </Button>
-            <Button onClick={() => void submitRename()} disabled={renameSaving || !renameValue.trim()}>
-              {t("workspace.menu.rename_confirm")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      />
 
       <CreateFolderWorkspaceDialog
         open={folderDialogOpen}

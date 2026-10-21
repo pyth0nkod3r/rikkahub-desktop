@@ -139,6 +139,8 @@ export type WorkspaceDto = {
   updateAt: number;
   lastAccessAt: number;
   status: "ready" | "missing";
+  sandboxBackend?: "local" | "wsl" | "docker";
+  sandboxImage?: string | null;
 };
 
 /** conversations/paged 响应包装。 */
