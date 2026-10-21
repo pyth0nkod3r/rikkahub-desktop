@@ -31,6 +31,7 @@ import type { GenerationEventSink, GenerationTarget } from "../inference-engine/
 import { openAiLocalTools, openAiMcpTools, openAiSearchTools } from "../tools/bound";
 import { openAiSubAgentTools } from "../tools/subagent-tools";
 import { openAiAutomationTools } from "../tools/automation-tools";
+import { openAiBrowserTools } from "../tools/browser-tools";
 import { SubAgentToolPolicies } from "../subagents/policy";
 import { executeToolCall, realizeToolResult, toolResultToParts } from "../tools/execution";
 import { openAiToolOutput } from "../tools/format";
@@ -186,6 +187,7 @@ export function createPiGeneralTools(ctx: PiGeneralToolsContext): ToolDefinition
     ...openAiMcpTools(ctx.assistant),
     ...openAiSubAgentTools(),
     ...openAiAutomationTools(),
+    ...openAiBrowserTools(),
   ];
   const declarations = SubAgentToolPolicies.isSubAgent(ctx.conversation.id)
     ? allDeclarations.filter((d) => SubAgentToolPolicies.permits(ctx.conversation.id, String(d.function.name)))
