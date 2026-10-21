@@ -19,6 +19,8 @@ import { repairForkNodeTheft } from "./conversations/fork-repair";
 import { initSseWiring } from "./api/sse";
 import { initMcpHealthBroadcast } from "./api/sse";
 import { startMcpHealthSupervisor } from "./tools/mcp-health";
+import { ensureAutomationTables } from "./automation/db";
+import { automationScheduler } from "./automation/scheduler";
 
 export async function bootstrap(): Promise<void> {
   // 1) 状态装载 + 一次性迁移链(SQLite 灌库、记忆拆分、附件去重、.tmp 清扫都在 loadState 内)。
@@ -72,4 +74,12 @@ export async function bootstrap(): Promise<void> {
   //    launchCount 在这类会话中永不落盘。
   setStartupPhase("finalize");
   saveState();
+
+  // 6) 自动化调度引擎(Cron/一次性任务/工作流)
+  try {
+    ensureAutomationTables();
+    automationScheduler.start();
+  } catch (err) {
+    console.error("[automation] 启动调度引擎失败:", err);
+  }
 }

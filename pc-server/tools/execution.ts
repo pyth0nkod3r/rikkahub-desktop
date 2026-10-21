@@ -22,6 +22,7 @@ import { isWorkspaceToolName } from "../workspace/approval";
 import { runWorkspaceTool } from "../workspace/runtime";
 import { SubAgentToolPolicies } from "../subagents/policy";
 import { executeSubAgentTool } from "./subagent-tools";
+import { executeAutomationTool, isAutomationTool } from "./automation-tools";
 
 /** save_memory 工具执行(1.3.2)。模型只提议 content,应用按 writeStrategy 决定落地方式:
  *  - always_assistant + 助手层启用 → 直接存助手层
@@ -90,6 +91,9 @@ export async function executeToolCall(
       conversationId: context?.conversationId,
       assistantId: assistant.id,
     });
+  }
+  if (isAutomationTool(name)) {
+    return executeAutomationTool(name, args, assistant?.id);
   }
   if (name === "save_memory") return runSaveMemoryTool(assistant, args, context);
   // 工作区工具（pi 移植层）：会话必须绑定工作区，守卫链在 runtime 内（同 search_web
@@ -230,5 +234,26 @@ export async function realizeToolResult(result: ToolResult): Promise<ToolOutputE
     }
   }
   return [...result.output, ...extra];
+}
+
+export async function executeRegisteredTool(
+  name: string,
+  args: Record<string, unknown>,
+  assistant?: Assistant,
+  context?: import("../inference-engine/events").ToolContext,
+): Promise<unknown> {
+  const asst = assistant || (state?.settings?.assistants?.[0] as Assistant);
+  return executeToolCall(
+    {
+      id: "call_auto",
+      type: "function",
+      function: {
+        name,
+        arguments: JSON.stringify(args || {}),
+      },
+    },
+    asst,
+    context,
+  );
 }
 

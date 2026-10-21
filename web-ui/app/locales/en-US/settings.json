@@ -65,7 +65,8 @@
       "s3": "object storage,R2,OSS,MinIO,cloud backup",
       "web_password": "login,auth,password,Docker,security",
       "update": "upgrade,new version",
-      "subagents": "sub-agent,agent,harness,delegation,multi-agent,specialist"
+      "subagents": "sub-agent,agent,harness,delegation,multi-agent,specialist",
+      "automation": "automation,cron,schedule,timer,recurring,workflow,job"
     }
   },
   "subnav": {
@@ -87,7 +88,8 @@
       "skills": "Skills",
       "injection": "Prompt injection",
       "quick": "Quick message templates",
-      "subagents": "Sub-Agents"
+      "subagents": "Sub-Agents",
+      "automation": "Automation & Cron"
     },
     "personalization": {
       "appearance": "Appearance",
@@ -1321,5 +1323,15 @@
     "cancel": "Cancel",
     "cancelled": "Sub-agent run cancelled",
     "no_runs": "No sub-agent runs recorded yet."
+  },
+  "automation": {
+    "general_title": "Job Identity & Timing",
+    "name_label": "Job Name",
+    "desc_label": "Description",
+    "mode_label": "Execution Mode",
+    "schedule_type_label": "Schedule Type",
+    "cron_label": "Cron Expression",
+    "enabled_label": "Enabled / Active",
+    "prompt_title": "Prompt & Task Instructions"
   }
 }

@@ -17,6 +17,7 @@ import { PromptInjectionSection } from "~/components/settings/extensions/injecti
 import { QuickMessagesSection } from "~/components/settings/extensions/quick-messages";
 import { SkillsSection } from "~/components/settings/extensions/skills";
 import { SubAgentsSection } from "~/components/settings/extensions/subagents";
+import { AutomationSection } from "~/components/settings/extensions/automation";
 import { AppSection, AppearanceSection, ProfileSection, ShortcutsSection } from "~/components/settings/general";
 import { LogsSection, type RequestLog } from "~/components/settings/logs";
 import { PortRequestSection, ProxySection } from "~/components/settings/proxy";
@@ -94,6 +95,7 @@ export const SETTINGS_PAGES: Record<SettingsPageKey, React.ComponentType<Setting
   "extensions/injection": PromptInjectionSection,
   "extensions/quick": QuickMessagesSection,
   "extensions/subagents": SubAgentsSection,
+  "extensions/automation": AutomationSection,
   "personalization/appearance": AppearanceSection,
   "personalization/shortcuts": ShortcutsSection,
   "speech/tts": TtsSection,

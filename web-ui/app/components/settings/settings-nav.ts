@@ -75,6 +75,7 @@ export const SETTINGS_NAV = [
       { id: "injection", labelKey: "settings:subnav.extensions.injection" },
       { id: "quick", labelKey: "settings:subnav.extensions.quick" },
       { id: "subagents", labelKey: "settings:subnav.extensions.subagents" },
+      { id: "automation", labelKey: "settings:subnav.extensions.automation" },
     ],
   },
   {

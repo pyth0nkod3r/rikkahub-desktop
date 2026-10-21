@@ -65,7 +65,8 @@
       "s3": "对象存储,R2,OSS,COS,MinIO,云备份",
       "web_password": "登录,鉴权,密码,Docker,安全",
       "update": "升级,新版本",
-      "subagents": "子智能体,智能体,多智能体,委派,专家,协同"
+      "subagents": "子智能体,智能体,多智能体,委派,专家,协同",
+      "automation": "自动化,定时任务,cron,周期,定时器,工作流,调度"
     }
   },
   "subnav": {
@@ -87,7 +88,8 @@
       "skills": "技能",
       "injection": "提示词注入",
       "quick": "快捷消息模板",
-      "subagents": "子智能体"
+      "subagents": "子智能体",
+      "automation": "自动化与定时任务"
     },
     "personalization": {
       "appearance": "外观",
@@ -1321,5 +1323,15 @@
     "cancel": "取消运行",
     "cancelled": "子智能体运行已中止",
     "no_runs": "暂无子智能体运行记录。"
+  },
+  "automation": {
+    "general_title": "任务标识与调度周期",
+    "name_label": "任务名称",
+    "desc_label": "任务说明",
+    "mode_label": "执行模式",
+    "schedule_type_label": "调度方式",
+    "cron_label": "Cron 表达式",
+    "enabled_label": "启用状态",
+    "prompt_title": "提示词与执行指令"
   }
 }

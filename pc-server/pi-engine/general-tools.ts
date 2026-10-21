@@ -30,6 +30,7 @@ import type { Assistant, Conversation, JsonValue, Model, ToolOutputEntry } from 
 import type { GenerationEventSink, GenerationTarget } from "../inference-engine/events";
 import { openAiLocalTools, openAiMcpTools, openAiSearchTools } from "../tools/bound";
 import { openAiSubAgentTools } from "../tools/subagent-tools";
+import { openAiAutomationTools } from "../tools/automation-tools";
 import { SubAgentToolPolicies } from "../subagents/policy";
 import { executeToolCall, realizeToolResult, toolResultToParts } from "../tools/execution";
 import { openAiToolOutput } from "../tools/format";
@@ -184,6 +185,7 @@ export function createPiGeneralTools(ctx: PiGeneralToolsContext): ToolDefinition
     ),
     ...openAiMcpTools(ctx.assistant),
     ...openAiSubAgentTools(),
+    ...openAiAutomationTools(),
   ];
   const declarations = SubAgentToolPolicies.isSubAgent(ctx.conversation.id)
     ? allDeclarations.filter((d) => SubAgentToolPolicies.permits(ctx.conversation.id, String(d.function.name)))

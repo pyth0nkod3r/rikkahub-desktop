@@ -71,6 +71,7 @@ const PAGE_KEYWORDS: Partial<Record<SettingsPageKey, string>> = {
   "extensions/injection": "injection",
   "extensions/quick": "quick",
   "extensions/subagents": "subagents",
+  "extensions/automation": "automation",
   "personalization/appearance": "appearance",
   "personalization/shortcuts": "shortcuts",
   "speech/tts": "tts",
@@ -222,6 +223,14 @@ const ROW_ENTRIES: readonly SettingsSearchEntry[] = [
   row("extensions/subagents", "subagents.enabled_label"),
   row("extensions/subagents", "subagents.system_prompt_label"),
   row("extensions/subagents", "subagents.capabilities_title"),
+  row("extensions/automation", "automation.general_title"),
+  row("extensions/automation", "automation.name_label"),
+  row("extensions/automation", "automation.desc_label"),
+  row("extensions/automation", "automation.mode_label"),
+  row("extensions/automation", "automation.schedule_type_label"),
+  row("extensions/automation", "automation.cron_label"),
+  row("extensions/automation", "automation.enabled_label"),
+  row("extensions/automation", "automation.prompt_title"),
 
   // 个性化
   row("personalization/appearance", "general.font_title"),
