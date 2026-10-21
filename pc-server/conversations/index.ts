@@ -690,7 +690,7 @@ export function exportPcConversationsDump(targetPath: string): number {
         last_access_at    INTEGER NOT NULL
       );
       INSERT INTO pcdump.pc_dump_meta (key, value) VALUES ('format', '2'), ('exportedAt', strftime('%Y-%m-%dT%H:%M:%fZ','now'));
-      INSERT INTO pcdump.pc_conversation SELECT id, assistant_id, title, system_prompt, suggestions, is_pinned, create_at, update_at, mode_injection_ids, lorebook_ids, workspace_id, workspace_cwd, engine_compactions FROM main.pc_conversation;
+      INSERT INTO pcdump.pc_conversation SELECT id, assistant_id, title, system_prompt, suggestions, is_pinned, create_at, update_at, mode_injection_ids, lorebook_ids, workspace_id, workspace_cwd, engine_compactions, agent_mode FROM main.pc_conversation;
       INSERT INTO pcdump.pc_message_node SELECT id, conversation_id, node_index, messages, select_index FROM main.pc_message_node;
     `);
     // 工作区表在活库懒建(workspace/index.ts 的 db()):用户从未建过工作区时 main 侧该表
