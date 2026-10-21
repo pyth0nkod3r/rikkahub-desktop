@@ -72,7 +72,8 @@ export function ensureConversationTables(db: InstanceType<typeof Database>): voi
       lorebook_ids       TEXT NOT NULL DEFAULT '[]',
       workspace_id       TEXT,
       workspace_cwd      TEXT,
-      engine_compactions TEXT
+      engine_compactions TEXT,
+      agent_mode         TEXT NOT NULL DEFAULT 'build'
     );
     CREATE TABLE IF NOT EXISTS pc_message_node (
       id              TEXT PRIMARY KEY NOT NULL,
@@ -601,6 +602,7 @@ export function migrateConversationsIntoDb(db: InstanceType<typeof Database>, co
         conv.workspaceId ?? null,
         conv.workspaceCwd ?? null,
         conv.engineCompactions?.length ? JSON.stringify(conv.engineCompactions) : null,
+        conv.agentMode || "build",
       );
       deleteNodes.run(conv.id);
       deleteConversationFts(db, [conv.id]);
@@ -666,7 +668,8 @@ export function exportPcConversationsDump(targetPath: string): number {
         lorebook_ids       TEXT NOT NULL DEFAULT '[]',
         workspace_id       TEXT,
         workspace_cwd      TEXT,
-        engine_compactions TEXT
+        engine_compactions TEXT,
+      agent_mode         TEXT NOT NULL DEFAULT 'build'
       );
       CREATE TABLE pcdump.pc_message_node (
         id              TEXT PRIMARY KEY NOT NULL,
