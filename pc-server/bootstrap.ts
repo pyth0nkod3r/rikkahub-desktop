@@ -21,6 +21,9 @@ import { initMcpHealthBroadcast } from "./api/sse";
 import { startMcpHealthSupervisor } from "./tools/mcp-health";
 import { ensureAutomationTables } from "./automation/db";
 import { automationScheduler } from "./automation/scheduler";
+import { ensureSshTables } from "./ssh/db";
+import { ensureTelegramTables, getTelegramConfig } from "./telegram/db";
+import { telegramBotService } from "./telegram/bot-service";
 
 export async function bootstrap(): Promise<void> {
   // 1) 状态装载 + 一次性迁移链(SQLite 灌库、记忆拆分、附件去重、.tmp 清扫都在 loadState 内)。
@@ -81,5 +84,17 @@ export async function bootstrap(): Promise<void> {
     automationScheduler.start();
   } catch (err) {
     console.error("[automation] 启动调度引擎失败:", err);
+  }
+
+  // 7) 远程 SSH 与 Telegram 机器人服务
+  try {
+    ensureSshTables();
+    ensureTelegramTables();
+    const tgConfig = getTelegramConfig();
+    if (tgConfig?.enabled && tgConfig.botToken) {
+      void telegramBotService.start();
+    }
+  } catch (err) {
+    console.error("[remote] 初始化远程服务失败:", err);
   }
 }

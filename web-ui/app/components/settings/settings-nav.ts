@@ -76,6 +76,7 @@ export const SETTINGS_NAV = [
       { id: "quick", labelKey: "settings:subnav.extensions.quick" },
       { id: "subagents", labelKey: "settings:subnav.extensions.subagents" },
       { id: "automation", labelKey: "settings:subnav.extensions.automation" },
+      { id: "remote", labelKey: "settings:subnav.extensions.remote" },
     ],
   },
   {

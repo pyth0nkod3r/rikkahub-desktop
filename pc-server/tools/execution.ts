@@ -24,6 +24,8 @@ import { SubAgentToolPolicies } from "../subagents/policy";
 import { executeSubAgentTool } from "./subagent-tools";
 import { executeAutomationTool, isAutomationTool } from "./automation-tools";
 import { executeBrowserTool, isBrowserTool } from "./browser-tools";
+import { executeSshTool, isSshTool } from "./ssh-tools";
+import { executeTelegramTool, isTelegramTool } from "./telegram-tools";
 
 /** save_memory 工具执行(1.3.2)。模型只提议 content,应用按 writeStrategy 决定落地方式:
  *  - always_assistant + 助手层启用 → 直接存助手层
@@ -98,6 +100,12 @@ export async function executeToolCall(
   }
   if (isBrowserTool(name)) {
     return executeBrowserTool(name, args);
+  }
+  if (isSshTool(name)) {
+    return executeSshTool(name, args);
+  }
+  if (isTelegramTool(name)) {
+    return executeTelegramTool(name, args);
   }
   if (name === "save_memory") return runSaveMemoryTool(assistant, args, context);
   // 工作区工具（pi 移植层）：会话必须绑定工作区，守卫链在 runtime 内（同 search_web

@@ -66,7 +66,8 @@
       "web_password": "login,auth,password,Docker,security",
       "update": "upgrade,new version",
       "subagents": "sub-agent,agent,harness,delegation,multi-agent,specialist",
-      "automation": "automation,cron,schedule,timer,recurring,workflow,job"
+      "automation": "automation,cron,schedule,timer,recurring,workflow,job",
+      "remote": "remote,telegram,bot,ssh,terminal,vps,server,sftp"
     }
   },
   "subnav": {
@@ -89,7 +90,8 @@
       "injection": "Prompt injection",
       "quick": "Quick message templates",
       "subagents": "Sub-Agents",
-      "automation": "Automation & Cron"
+      "automation": "Automation & Cron",
+      "remote": "Remote Control & SSH"
     },
     "personalization": {
       "appearance": "Appearance",
@@ -1333,5 +1335,16 @@
     "cron_label": "Cron Expression",
     "enabled_label": "Enabled / Active",
     "prompt_title": "Prompt & Task Instructions"
+  },
+  "remote": {
+    "general_title": "Telegram Bot Remote Control",
+    "bot_token_label": "Telegram Bot Token",
+    "bot_status_label": "Service Status",
+    "allowed_chats_label": "Allowed Chat IDs",
+    "enabled_label": "Enable Remote Service",
+    "ssh_title": "Remote SSH Hosts & Servers",
+    "ssh_label_label": "Host Label",
+    "ssh_host_label": "Remote Address & Port",
+    "ssh_user_label": "User & Auth"
   }
 }

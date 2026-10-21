@@ -17,6 +17,7 @@ import { handleUpdateRoutes } from "./handlers/update";
 import { handleWorkspaceRoutes } from "./handlers/workspaces";
 import { handleSubAgentRoutes } from "./handlers/subagents";
 import { handleAutomationRoutes } from "./handlers/automation";
+import { handleRemoteRoutes } from "./handlers/remote";
 
 const handlers = [
   handleSystemRoutes,
@@ -27,6 +28,7 @@ const handlers = [
   handleWorkspaceRoutes,
   handleSubAgentRoutes,
   handleAutomationRoutes,
+  handleRemoteRoutes,
   handleFileRoutes,
   handleSkillRoutes,
   handleDataRoutes,

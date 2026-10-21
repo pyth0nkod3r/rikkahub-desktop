@@ -14,6 +14,8 @@ import { listSkills } from "./skills";
 import { openAiSubAgentTools } from "./subagent-tools";
 import { openAiAutomationTools } from "./automation-tools";
 import { openAiBrowserTools } from "./browser-tools";
+import { openAiSshTools } from "./ssh-tools";
+import { openAiTelegramTools } from "./telegram-tools";
 import { SubAgentToolPolicies } from "../subagents/policy";
 
 /** 外挂 search_web 的唯一注入源。带防双搜门控:模型已声明内置 search 时(自带
@@ -60,6 +62,8 @@ export function conversationFunctionTools(
     ...openAiSubAgents(),
     ...openAiAutomationTools(),
     ...openAiBrowserTools(),
+    ...openAiSshTools(),
+    ...openAiTelegramTools(),
   ];
   if (conversationId && SubAgentToolPolicies.isSubAgent(conversationId)) {
     return SubAgentToolPolicies.filter(conversationId, tools, (t) => t.function.name);

@@ -231,6 +231,15 @@ const ROW_ENTRIES: readonly SettingsSearchEntry[] = [
   row("extensions/automation", "automation.cron_label"),
   row("extensions/automation", "automation.enabled_label"),
   row("extensions/automation", "automation.prompt_title"),
+  row("extensions/remote", "remote.general_title"),
+  row("extensions/remote", "remote.bot_token_label"),
+  row("extensions/remote", "remote.bot_status_label"),
+  row("extensions/remote", "remote.allowed_chats_label"),
+  row("extensions/remote", "remote.enabled_label"),
+  row("extensions/remote", "remote.ssh_title"),
+  row("extensions/remote", "remote.ssh_label_label"),
+  row("extensions/remote", "remote.ssh_host_label"),
+  row("extensions/remote", "remote.ssh_user_label"),
 
   // 个性化
   row("personalization/appearance", "general.font_title"),

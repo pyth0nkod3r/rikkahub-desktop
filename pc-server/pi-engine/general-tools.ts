@@ -32,6 +32,8 @@ import { openAiLocalTools, openAiMcpTools, openAiSearchTools } from "../tools/bo
 import { openAiSubAgentTools } from "../tools/subagent-tools";
 import { openAiAutomationTools } from "../tools/automation-tools";
 import { openAiBrowserTools } from "../tools/browser-tools";
+import { openAiSshTools } from "../tools/ssh-tools";
+import { openAiTelegramTools } from "../tools/telegram-tools";
 import { SubAgentToolPolicies } from "../subagents/policy";
 import { executeToolCall, realizeToolResult, toolResultToParts } from "../tools/execution";
 import { openAiToolOutput } from "../tools/format";
@@ -188,6 +190,8 @@ export function createPiGeneralTools(ctx: PiGeneralToolsContext): ToolDefinition
     ...openAiSubAgentTools(),
     ...openAiAutomationTools(),
     ...openAiBrowserTools(),
+    ...openAiSshTools(),
+    ...openAiTelegramTools(),
   ];
   const declarations = SubAgentToolPolicies.isSubAgent(ctx.conversation.id)
     ? allDeclarations.filter((d) => SubAgentToolPolicies.permits(ctx.conversation.id, String(d.function.name)))

@@ -18,6 +18,7 @@ import { QuickMessagesSection } from "~/components/settings/extensions/quick-mes
 import { SkillsSection } from "~/components/settings/extensions/skills";
 import { SubAgentsSection } from "~/components/settings/extensions/subagents";
 import { AutomationSection } from "~/components/settings/extensions/automation";
+import { RemoteSection } from "~/components/settings/extensions/remote";
 import { AppSection, AppearanceSection, ProfileSection, ShortcutsSection } from "~/components/settings/general";
 import { LogsSection, type RequestLog } from "~/components/settings/logs";
 import { PortRequestSection, ProxySection } from "~/components/settings/proxy";
@@ -96,6 +97,7 @@ export const SETTINGS_PAGES: Record<SettingsPageKey, React.ComponentType<Setting
   "extensions/quick": QuickMessagesSection,
   "extensions/subagents": SubAgentsSection,
   "extensions/automation": AutomationSection,
+  "extensions/remote": RemoteSection,
   "personalization/appearance": AppearanceSection,
   "personalization/shortcuts": ShortcutsSection,
   "speech/tts": TtsSection,
