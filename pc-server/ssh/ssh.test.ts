@@ -9,7 +9,6 @@ import {
 } from "./db";
 import { getSshExecutable } from "./client";
 import {
-  executeSshTool,
   isSshTool,
   openAiSshTools,
 } from "../tools/ssh-tools";

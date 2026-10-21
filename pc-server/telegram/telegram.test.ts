@@ -7,7 +7,6 @@ import {
 } from "./db";
 import { telegramBotService } from "./bot-service";
 import {
-  executeTelegramTool,
   isTelegramTool,
   openAiTelegramTools,
 } from "../tools/telegram-tools";
