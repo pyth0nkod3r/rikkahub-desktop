@@ -23,6 +23,7 @@
 import type { Assistant, Conversation, JsonValue, Message, MessagePart, Model } from "../foundation/types";
 import { applyPlaceholders, cloneJson, getStringArray, message, textFromParts } from "../foundation/utils";
 import { state } from "../persistence/json-store";
+import { SubAgentToolPolicies } from "../subagents/policy";
 import {
   activePromptInjections as activePromptInjectionsCore,
   applyMessageTemplateToParts,
@@ -110,12 +111,16 @@ export interface ConversationInjectionOverride {
   lorebookIds: string[];
 }
 
-/** 生效注入集合(专题9:助手允许会话级绑定时,生效 id 集完全来自会话)。 */
+/** 生效注入集合(专题9:助手允许会话级绑定时,生效 id 集完全来自会话)。
+ *  子智能体运行在独立隔离上下文，禁止继承父助手的模式注入与 lorebooks (commit 692439cef 对齐)。 */
 export function activePromptInjections(
   conversation: Conversation,
   assistant: Assistant,
   messages: Message[],
 ): Array<Record<string, JsonValue>> {
+  if (SubAgentToolPolicies.isSubAgent(conversation.id)) {
+    return [];
+  }
   const override = assistant.allowConversationPromptInjection === true
     ? {
         modeInjectionIds: getStringArray(conversation.modeInjectionIds),

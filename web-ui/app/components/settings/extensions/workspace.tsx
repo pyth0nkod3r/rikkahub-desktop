@@ -26,6 +26,9 @@ import type { SettingsSectionProps } from "../settings-registry";
 import { useWorkspaceStore } from "~/stores/workspace-store";
 import { WorkspaceEditDialog } from "~/components/workspace/workspace-edit-dialog";
 import { useContainerTabsStore } from "~/stores/container-tabs-store";
+import { closeSettingsDialog } from "~/stores/settings-dialog-store";
+import { confirmDialog } from "~/stores/confirm-store";
+import { WorkspaceTerminalModal } from "~/components/workspace/workspace-terminal-modal";
 import { useNavigate } from "react-router";
 import type { WorkspaceDto } from "~/types";
 
@@ -59,6 +62,7 @@ export function WorkspaceSection(_props: SettingsSectionProps) {
   const [sandboxStatus, setSandboxStatus] = React.useState<SandboxStatus | null>(null);
   const [refreshingShell, setRefreshingShell] = React.useState(false);
   const [editingWorkspace, setEditingWorkspace] = React.useState<WorkspaceDto | null>(null);
+  const [terminalWorkspace, setTerminalWorkspace] = React.useState<WorkspaceDto | null>(null);
 
   const loadData = React.useCallback(async () => {
     try {
@@ -95,10 +99,29 @@ export function WorkspaceSection(_props: SettingsSectionProps) {
       const res = await api.post<{ workspace: WorkspaceDto }>("workspaces", { type: "managed" });
       await refreshWorkspaces();
       useContainerTabsStore.getState().openContainer(res.workspace.id);
+      closeSettingsDialog();
       navigate("/");
       toast.success(`Created managed workspace: ${res.workspace.name}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to create workspace");
+    }
+  };
+
+  const handleDeleteWorkspace = async (ws: WorkspaceDto) => {
+    const confirmed = await confirmDialog({
+      title: `Delete Workspace "${ws.name}"?`,
+      description: "This unlinks the workspace registration from Rikkahub AgentX. Files on your disk will remain untouched.",
+      danger: true,
+      confirmLabel: "Delete Workspace",
+    });
+    if (!confirmed) return;
+    try {
+      await api.delete(`workspaces/${ws.id}`);
+      useContainerTabsStore.getState().closeContainer(ws.id);
+      await refreshWorkspaces();
+      toast.success(`Deleted workspace "${ws.name}"`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete workspace");
     }
   };
 
@@ -290,6 +313,17 @@ export function WorkspaceSection(_props: SettingsSectionProps) {
                   <div className="flex items-center gap-1.5">
                     <Button
                       type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setTerminalWorkspace(ws)}
+                      className="h-8 px-2 text-xs gap-1"
+                      title="Open Interactive Sandboxed Terminal"
+                    >
+                      <Terminal className="size-3.5" />
+                      Terminal
+                    </Button>
+                    <Button
+                      type="button"
                       variant="ghost"
                       size="sm"
                       onClick={() => setEditingWorkspace(ws)}
@@ -305,11 +339,22 @@ export function WorkspaceSection(_props: SettingsSectionProps) {
                       size="sm"
                       onClick={() => {
                         useContainerTabsStore.getState().openContainer(ws.id);
+                        closeSettingsDialog();
                         navigate("/");
                       }}
                       className="h-8 px-2 text-xs"
                     >
                       Open
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => void handleDeleteWorkspace(ws)}
+                      className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                      title="Delete Workspace"
+                    >
+                      <Trash2 className="size-3.5" />
                     </Button>
                   </div>
                 </div>
@@ -329,6 +374,17 @@ export function WorkspaceSection(_props: SettingsSectionProps) {
               setEditingWorkspace(null);
               void refreshWorkspaces();
             }
+          }}
+        />
+      ) : null}
+
+      {/* Interactive Sandboxed Terminal Modal */}
+      {terminalWorkspace ? (
+        <WorkspaceTerminalModal
+          workspace={terminalWorkspace}
+          open={Boolean(terminalWorkspace)}
+          onOpenChange={(open) => {
+            if (!open) setTerminalWorkspace(null);
           }}
         />
       ) : null}

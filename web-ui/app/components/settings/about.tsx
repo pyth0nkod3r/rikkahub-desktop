@@ -131,18 +131,18 @@ export function AboutSection() {
     {
       key: "github",
       label: "GitHub",
-      value: "https://github.com/yuh-G/rikkahub-desktop",
+      value: "https://github.com/pyth0nkod3r/rikkahub-desktop",
       icon: Github,
-      onClick: () => void openExternal("https://github.com/yuh-G/rikkahub-desktop/"),
+      onClick: () => void openExternal("https://github.com/pyth0nkod3r/rikkahub-desktop/"),
       action: undefined,
     },
     {
       key: "license",
       label: t("settings:about.license"),
-      value: "https://github.com/yuh-G/rikkahub-desktop/blob/master/LICENSE",
+      value: "https://github.com/pyth0nkod3r/rikkahub-desktop/blob/main/LICENSE",
       icon: FileClock,
       onClick: () =>
-        void openExternal("https://github.com/yuh-G/rikkahub-desktop/blob/master/LICENSE"),
+        void openExternal("https://github.com/pyth0nkod3r/rikkahub-desktop/blob/main/LICENSE"),
       action: undefined,
     },
   ];
@@ -150,8 +150,8 @@ export function AboutSection() {
     <>
       <SettingsStack>
         <div className="flex flex-col items-center gap-3 py-4 text-center">
-          <img src="/app-icon.png" alt="RikkaHub" className="size-24 rounded-full shadow-sm" />
-          <div className="text-2xl font-semibold tracking-normal">RikkaHub</div>
+          <img src="/app-icon.png" alt="Rikkahub AgentX" className="size-24 rounded-full shadow-sm" />
+          <div className="text-2xl font-semibold tracking-normal">Rikkahub AgentX</div>
         </div>
         <SettingsRows>
           {aboutRows.map((row) => {

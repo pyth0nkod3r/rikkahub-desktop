@@ -28,7 +28,7 @@ export async function handleUpdateRoutes(request: Request, _url: URL, path: stri
   // when that happens we fall back to scraping the public `github.com/<repo>/releases/latest`
   // redirect, which doesn't hit the API and isn't rate-limited.
   if (path === "update/check" && request.method === "GET") {
-    const repo = "yuh-G/rikkahub-desktop";
+    const repo = "pyth0nkod3r/rikkahub-desktop";
 
     // 按当前运行平台挑选 release asset。命名约定：
     //   Windows: Rikkahub_<tag>_x64-setup.exe   (NSIS 安装器,含 exe+web-ui+icons)

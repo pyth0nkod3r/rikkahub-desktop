@@ -8,6 +8,7 @@ import { deleteWorkspaceEntry, listWorkspaceDir, previewWorkspaceFile, readWorks
 import { mountedWorkspaceToolNames, refreshShellAvailability, shellAvailability } from "../../workspace/runtime";
 import { error, json, readJson } from "../request";
 import { getSandboxStatus } from "../../workspace/sandboxing/detect";
+import { createSandboxedBashOperations } from "../../workspace/sandboxing/runners";
 
 export function shellStatusPayload(): { available: boolean; error: string | null; mountedTools: string[] } {
   const shell = shellAvailability();
@@ -118,6 +119,47 @@ export async function handleWorkspaceRoutes(request: Request, _url: URL, path: s
       return null;
     } catch (err) {
       return error(err instanceof Error ? err.message : "AGENTS.md 操作失败", 400);
+    }
+  }
+
+  // ---- 交互式终端执行接口:在指定工作区的沙箱环境内运行命令 ----
+  if (sub === "terminal/exec" && request.method === "POST") {
+    const workspace = getWorkspace(workspaceId);
+    if (!workspace) return error("Workspace not found", 404);
+    const body = await readJson<{ command?: string; cwd?: string }>(request);
+    const command = String(body.command ?? "").trim();
+    if (!command) return error("Command cannot be empty", 400);
+
+    const execCwd = body.cwd?.trim() || workspace.root;
+    const ops = createSandboxedBashOperations(workspace.sandboxBackend || "local", {
+      wslDistro: workspace.sandboxImage ?? undefined,
+      dockerImage: workspace.sandboxImage ?? undefined,
+    });
+
+    let stdout = "";
+    let stderr = "";
+    try {
+      const res = await ops.exec(command, execCwd, {
+        onData: (chunk) => {
+          stdout += chunk.toString("utf8");
+        },
+        timeout: 60,
+      });
+      return json({
+        ok: (res.exitCode ?? 0) === 0,
+        exitCode: res.exitCode ?? 0,
+        stdout,
+        stderr,
+        cwd: execCwd,
+      });
+    } catch (err) {
+      return json({
+        ok: false,
+        exitCode: -1,
+        stdout,
+        stderr: err instanceof Error ? err.message : String(err),
+        cwd: execCwd,
+      });
     }
   }
 

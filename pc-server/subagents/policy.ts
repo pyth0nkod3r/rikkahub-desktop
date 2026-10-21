@@ -94,6 +94,14 @@ export type SubAgentPolicyBuildResult =
   | { ok: true; policy: SubAgentToolPolicy }
   | { ok: false; unknownCapabilities: string[] };
 
+/**
+ * Default system prompt for an isolated sub-agent run.
+ * Ported from rikkahub-agent DEFAULT_SUBAGENT_SYSTEM_PROMPT (commit 692439cef)
+ */
+export const DEFAULT_SUBAGENT_SYSTEM_PROMPT = `You are a focused sub-agent executing a delegated task.
+You operate in an isolated environment with a restricted tool catalog (workspace tools and explicitly granted capabilities only).
+Focus solely on completing the assigned task and report your findings clearly and concisely.`;
+
 export function buildSubAgentToolPolicy(
   roleTools: Iterable<string>,
   capabilities: Iterable<string>,

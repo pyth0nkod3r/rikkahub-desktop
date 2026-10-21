@@ -44,6 +44,7 @@ import { PI_THINKING_BUDGETS } from "./model-bridge";
 import { templateVariables } from "../inference-engine/message-enrichment";
 import { buildSearchContext } from "../search";
 import { reportError } from "../observability/app-errors";
+import { SubAgentToolPolicies, DEFAULT_SUBAGENT_SYSTEM_PROMPT } from "../subagents/policy";
 
 export interface PiSessionResources {
   resourceLoader: DefaultResourceLoader;
@@ -56,8 +57,13 @@ const MAX_SNAPSHOTS = 200;
 const personaSnapshots = new Map<string, string>();
 
 /** 生效人设原文:会话级 systemPrompt(助手允许时)优先,否则助手人设——
- *  与聊天引擎 conversationTransformedMessages 的 effectiveSystemPrompt 同一规则。 */
+ *  与聊天引擎 conversationTransformedMessages 的 effectiveSystemPrompt 同一规则。
+ *  子智能体具有严格隔离上下文，绝不继承父助手的完整系统提示词（commit 692439cef 对齐）。 */
 function personaSource(conversation: Conversation, assistant: Assistant): string {
+  if (SubAgentToolPolicies.isSubAgent(conversation.id)) {
+    const custom = String(conversation.systemPrompt ?? "").trim();
+    return custom || DEFAULT_SUBAGENT_SYSTEM_PROMPT;
+  }
   const conversationPrompt = assistant.allowConversationSystemPrompt
     ? String(conversation.systemPrompt ?? "").trim()
     : "";
@@ -110,15 +116,20 @@ export function buildPiAppendSystemPrompt(
   model: Model,
   extra?: string[],
 ): string[] {
+  const isSubAgent = SubAgentToolPolicies.isSubAgent(conversation.id);
+  const permitsMemory = isSubAgent
+    ? (SubAgentToolPolicies.permits(conversation.id, "memory_tool") || SubAgentToolPolicies.permits(conversation.id, "save_memory"))
+    : true;
+
   const [memoryBlock, recentChatsBlock] = frozenContextBlocks(assistant, conversation.id);
   return [
     frozenPersona(conversation, assistant, model),
-    buildSearchContext(),
-    conversation.agentMode === "plan" ? PLAN_MODE_SYSTEM_PROMPT : "",
-    memoryBlock,
-    recentChatsBlock,
-    ...(extra ?? []),
-    stableGuidanceLines(),
+    isSubAgent ? "" : buildSearchContext(),
+    isSubAgent ? "" : (conversation.agentMode === "plan" ? PLAN_MODE_SYSTEM_PROMPT : ""),
+    permitsMemory ? memoryBlock : "",
+    isSubAgent ? "" : recentChatsBlock,
+    ...(isSubAgent ? [] : (extra ?? [])),
+    isSubAgent ? "" : stableGuidanceLines(),
   ].filter(Boolean);
 }
 

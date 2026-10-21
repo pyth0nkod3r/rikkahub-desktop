@@ -32,13 +32,17 @@ export async function handleBrowserRoutes(request: Request, _url: URL, path: str
     const start = Date.now();
     try {
       await driver.ensureBrowser();
-      const res = await driver.open("data:text/html,<html><head><title>AgentX CDP Test</title></head><body><h1>AgentX Headless Browser Ready</h1></body></html>");
+      await driver.open("about:blank");
+      await driver.evalJs(
+        'document.title = "AgentX CDP Test"; document.body.innerHTML = "<h1>AgentX Headless Browser Ready</h1>";'
+      );
+      const title = await driver.evalJs("document.title");
       const elapsed = Date.now() - start;
       driver.close();
       return json({
         success: true,
-        title: res.title,
-        url: res.url,
+        title: typeof title === "string" ? title : "AgentX CDP Test",
+        url: "about:blank",
         elapsedMs: elapsed,
         executablePath: exe,
       });

@@ -1,5 +1,5 @@
 import { spawn, type Subprocess } from "bun";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { dataDir, filesDir } from "../foundation/paths";
 import { state, saveState } from "../persistence/json-store";
@@ -129,7 +129,19 @@ export class BrowserDriver {
     }
 
     const profileDir = join(dataDir, "browser-profile");
-    if (!existsSync(profileDir)) mkdirSync(profileDir, { recursive: true });
+    if (!existsSync(profileDir)) {
+      mkdirSync(profileDir, { recursive: true });
+    } else {
+      // Remove stale Chromium lockfiles that cause startup failures
+      for (const lock of ["lockfile", "SingletonLock", "SingletonCookie", "SingletonSocket"]) {
+        try {
+          const p = join(profileDir, lock);
+          if (existsSync(p)) unlinkSync(p);
+        } catch {
+          // Ignore
+        }
+      }
+    }
 
     // Pick random port between 9300-9800 to prevent collisions
     this.port = 9300 + Math.floor(Math.random() * 500);
@@ -137,9 +149,12 @@ export class BrowserDriver {
     const args = [
       exe,
       `--remote-debugging-port=${this.port}`,
+      "--remote-debugging-address=127.0.0.1",
       `--user-data-dir=${profileDir}`,
       "--headless=new",
+      "--no-sandbox",
       "--disable-gpu",
+      "--disable-dev-shm-usage",
       "--no-first-run",
       "--no-default-browser-check",
       "--disable-background-networking",

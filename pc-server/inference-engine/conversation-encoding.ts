@@ -14,6 +14,7 @@ import { GOOGLE_SAFETY_SETTINGS, apiContentFromParts, apiContentText, appendAssi
 import { responsesHistoryReasoningAllowed } from "../model-providers/request-dialect";
 import { isEmptyAssistantPlaceholder } from "./parts";
 import { enrichMessages, templateVariables } from "./message-enrichment";
+import { SubAgentToolPolicies, DEFAULT_SUBAGENT_SYSTEM_PROMPT } from "../subagents/policy";
 
 // 消息模板/时间提醒/lorebook+模式注入/滞回截断 已上收至 message-enrichment.ts
 // (引擎无关层);本文件只负责"富化产物 → 三家 Provider 请求体"的编码。
@@ -90,10 +91,18 @@ function conversationTransformedMessages(conversation: Conversation, assistant: 
     .filter(Boolean)
     .map((msg) => cloneJson(msg));
 
-  const conversationSystemPrompt = assistant.allowConversationSystemPrompt
-    ? String(conversation.systemPrompt ?? "").trim()
-    : "";
-  const effectiveSystemPrompt = conversationSystemPrompt || assistant.systemPrompt.trim();
+  const isSubAgent = SubAgentToolPolicies.isSubAgent(conversation.id);
+  const effectiveSystemPrompt = isSubAgent
+    ? (String(conversation.systemPrompt ?? "").trim() || DEFAULT_SUBAGENT_SYSTEM_PROMPT)
+    : (assistant.allowConversationSystemPrompt ? String(conversation.systemPrompt ?? "").trim() : "") || assistant.systemPrompt.trim();
+
+  const permitsMemory = isSubAgent
+    ? (SubAgentToolPolicies.permits(conversation.id, "memory_tool") || SubAgentToolPolicies.permits(conversation.id, "save_memory"))
+    : true;
+  const contextBlocks = isSubAgent
+    ? (permitsMemory ? frozenContextBlocks(assistant, conversation.id) : [])
+    : frozenContextBlocks(assistant, conversation.id);
+
   // 专题11-P1-2:system 各区块按“稳定→易变”排列。专题12 进一步把记忆/最近会话
   // 冻结为会话级快照(context-snapshots.ts)。P6 退役:原居首的工作区段已移除——
   // 工作区可用必走 pi 会话(agent 身份由 pi 系统提示词+appendSystemPrompt 承载)。
@@ -101,9 +110,9 @@ function conversationTransformedMessages(conversation: Conversation, assistant: 
     effectiveSystemPrompt
       ? renderTemplate(effectiveSystemPrompt, templateVariables("", "system", assistant, picked.model))
       : "",
-    buildSkillsContext(assistant),
-    buildSearchContext(),
-    ...frozenContextBlocks(assistant, conversation.id),
+    isSubAgent ? "" : buildSkillsContext(assistant),
+    isSubAgent ? "" : buildSearchContext(),
+    ...contextBlocks,
   ].filter(Boolean);
 
   const systemMessage = systemParts.length
