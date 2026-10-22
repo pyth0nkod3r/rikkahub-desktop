@@ -22,6 +22,15 @@ const PROVIDER_TEST_OUTPUT_TOKENS = 4096;
 
 /** 消息端点 URL。baseUrlOverride:订阅供应商凭据派生的 baseUrl 接力(Copilot 的
  *  toAuth().baseUrl 由 access token 的 proxy-ep / 企业域名推导,可能与预置默认不同)。 */
+export function isGeminiOAuthProvider(providerItem: Provider): boolean {
+  return (
+    providerItem.id === "google-gemini-oauth" ||
+    providerItem.id === "2b6c1f84-73ad-4e35-b0c7-1a9e4d5f8c21" ||
+    providerItem.name.toLowerCase().includes("gemini oauth") ||
+    providerItem.oauth?.flow === ("gemini-oauth" as any)
+  );
+}
+
 export function endpointFor(providerItem: Provider, baseUrlOverride?: string) {
   const base = (baseUrlOverride?.trim() || providerItem.baseUrl).replace(/\/+$/, "");
   if (providerItem.type === "openai") {
@@ -35,6 +44,7 @@ export function endpointFor(providerItem: Provider, baseUrlOverride?: string) {
   // 要求 baseUrl 必须带 /v1,漏填即 404,且同一配置工作区(pi 剥 /v1 由 SDK 拼)能跑、
   // 聊天挂——引擎间行为分歧。设置页 Base URL 预览(settings/providers/common.ts endpointPreview)同步同款规则。
   if (providerItem.type === "claude") return `${base.replace(/\/v1$/, "")}/v1/messages`;
+  if (isGeminiOAuthProvider(providerItem)) return `${base}/v1internal:streamGenerateContent?alt=sse`;
   return `${base}/models/{model}:generateContent`;
 }
 
@@ -339,6 +349,28 @@ function providerTestAssistant(modelItem?: Model): Assistant {
 
 function providerTestPayload(providerItem: Provider, mode: "non_stream" | "stream" | "tools", selectedModel: string, baseUrlOverride?: string) {
   if (providerItem.type === "google") {
+    if (isGeminiOAuthProvider(providerItem)) {
+      const suffix = mode === "stream" ? "v1internal:streamGenerateContent?alt=sse" : "v1internal:generateContent";
+      let projectId = "default-project";
+      try {
+        const acc = geminiAccountRepository.listAccounts().find((a) => a.enabled && a.tokenStatus !== "INVALID");
+        if (acc?.projectId) projectId = acc.projectId;
+      } catch {}
+      const req: any = {
+        contents: [{ role: "user", parts: [{ text: mode === "tools" ? "Use the get_current_time tool." : "hello" }] }],
+        systemInstruction: { parts: [{ text: "You are a helpful assistant" }] },
+      };
+      if (mode === "tools") {
+        req.tools = [{ functionDeclarations: [{ name: "get_current_time", description: "Get the current date and time.", parameters: { type: "object", properties: {} } }] }];
+      }
+      const body = {
+        project: projectId,
+        model: selectedModel,
+        request: req,
+      };
+      const effectiveBase = baseUrlOverride?.trim() || "https://daily-cloudcode-pa.googleapis.com";
+      return { url: `${effectiveBase.replace(/\/+$/, "")}/${suffix}`, body };
+    }
     const body: any = {
       contents: [{ role: "user", parts: [{ text: mode === "tools" ? "Use the get_current_time tool." : "hello" }] }],
       systemInstruction: { parts: [{ text: "You are a helpful assistant" }] },
@@ -430,7 +462,8 @@ async function readProviderTestStream(response: Response, providerItem: Provider
     try {
       const raw = JSON.parse(payload);
       if (providerItem.type === "google") {
-        appendPreview(String(raw.candidates?.[0]?.content?.parts?.[0]?.text ?? ""));
+        const cands = raw.candidates || raw.response?.candidates;
+        appendPreview(String(cands?.[0]?.content?.parts?.[0]?.text ?? ""));
         return;
       }
       if (providerItem.type === "claude") {

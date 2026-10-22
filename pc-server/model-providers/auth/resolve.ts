@@ -11,7 +11,7 @@ import type { Provider } from "../../foundation/types";
 import { providerHeaders } from "../index";
 import { createPiCredentialStore } from "./credential-store";
 import { OAUTH_FLOWS, loadOAuthFlow, oauthFlowFor } from "./flows";
-import { geminiAccountRepository, antigravityHeaders, GEMINI_CODE_ASSIST_ENDPOINT } from "../gemini-oauth/repository";
+import { geminiAccountRepository, antigravityHeaders, GEMINI_DAILY_ENDPOINT } from "../gemini-oauth/repository";
 import { codexAccountRepository, CODEX_BASE_URL } from "../codex-oauth/repository";
 
 export interface ResolvedProviderAuth {
@@ -43,7 +43,7 @@ export async function resolveProviderAuthForProvider(
     const acc = await geminiAccountRepository.acquireAccount();
     return {
       headers: antigravityHeaders(acc.accessToken),
-      baseUrl: GEMINI_CODE_ASSIST_ENDPOINT,
+      baseUrl: GEMINI_DAILY_ENDPOINT,
       accountId: acc.id,
     };
   }

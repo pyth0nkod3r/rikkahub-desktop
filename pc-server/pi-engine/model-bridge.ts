@@ -6,7 +6,12 @@
 //
 // 契约：传入的 provider 必须是"生效 provider"（findModel 已展开 providerOverwrite 的输出），
 // 与聊天引擎同源同口径——工作区会话用的模型 = 设置页配的那一个，逐字一致。
-import type { Api, KnownApi, Model as PiModel } from "../../pi/packages/ai/src/types.ts";
+import type { Api, KnownApi, Model as PiModel, AssistantMessage, Context as PiContext, SimpleStreamOptions } from "../../pi/packages/ai/src/types.ts";
+import { geminiAccountRepository, antigravityHeaders } from "../model-providers/gemini-oauth/repository";
+import { convertMessages, convertTools, isThinkingPart } from "../../pi/packages/ai/src/api/google-shared.ts";
+import { sanitizeSurrogates } from "../../pi/packages/ai/src/utils/sanitize-unicode.ts";
+import { AssistantMessageEventStream } from "../../pi/packages/ai/src/utils/event-stream.ts";
+import { parseSseChunks } from "../inference-engine/providers";
 import { AuthStorage } from "../../pi/packages/coding-agent/src/core/auth-storage.ts";
 import { ModelRuntime } from "../../pi/packages/coding-agent/src/core/model-runtime.ts";
 import type { ProviderConfigInput } from "../../pi/packages/coding-agent/src/core/provider-composer.ts";
@@ -333,7 +338,231 @@ function piThinkingOverridesFor(
 /** 映射不到时给用户看的原因（模型选择器过滤面与错误提示共用，方案"诚实披露，不硬塞"）。
  *  sessionId:会话身份头(台账 §7.4;X-Session-ID + opencode 特例)经注册头带进 pi 的每轮
  *  请求——主会话与压缩会话都传 ctx.conversationId;缺省(纯测试/冒烟)不注入,不发明 ID。 */
+
+function createGeminiOAuthStreamSimple(providerItem: Provider) {
+  let toolCallCounter = 0;
+  return (model: PiModel<Api>, context: PiContext, options?: SimpleStreamOptions): AssistantMessageEventStream => {
+    const stream = new AssistantMessageEventStream();
+    const output: AssistantMessage = {
+      role: "assistant",
+      content: [],
+      api: "google-generative-ai" as Api,
+      provider: model.provider,
+      model: model.id,
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+      stopReason: "pending",
+      timestamp: Date.now(),
+    };
+
+    (async () => {
+      try {
+        const acc = await geminiAccountRepository.acquireAccount();
+        const contents = convertMessages(model as any, context);
+        const req: any = {
+          contents,
+          generationConfig: {
+            maxOutputTokens: model.maxTokens || 8192,
+          },
+        };
+        if (context.systemPrompt) {
+          req.systemInstruction = { parts: [{ text: sanitizeSurrogates(context.systemPrompt) }] };
+        }
+        if (context.tools && context.tools.length > 0) {
+          req.tools = convertTools(context.tools as any);
+        }
+
+        const body = {
+          project: acc.projectId,
+          model: model.id,
+          request: req,
+        };
+
+        const res = await fetch("https://daily-cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse", {
+          method: "POST",
+          headers: antigravityHeaders(acc.accessToken),
+          body: JSON.stringify(body),
+          signal: options?.signal,
+        });
+
+        if (!res.ok) {
+          const errText = await res.text().catch(() => "");
+          throw new Error(`Gemini OAuth upstream error (${res.status}): ${errText}`);
+        }
+
+        stream.push({ type: "start", partial: output });
+        const reader = res.body?.getReader();
+        if (!reader) throw new Error("No response body from Gemini OAuth");
+
+        const decoder = new TextDecoder();
+        let buffer = "";
+        const blocks = output.content;
+        const blockIndex = () => blocks.length - 1;
+
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const frames = buffer.split(/\r?\n\r?\n/);
+          buffer = frames.pop() ?? "";
+
+          for (const frame of frames) {
+            for (const payload of parseSseChunks(frame)) {
+              if (!payload || payload === "[DONE]") continue;
+              try {
+                const parsed = JSON.parse(payload);
+                const data = parsed.response || parsed;
+                const candidate = data.candidates?.[0];
+                if (data.usageMetadata) {
+                  const u = data.usageMetadata;
+                  output.usage.input = Number(u.promptTokenCount ?? output.usage.input);
+                  output.usage.output = Number(u.candidatesTokenCount ?? output.usage.output);
+                  output.usage.totalTokens = Number(u.totalTokenCount ?? (output.usage.input + output.usage.output));
+                }
+                const parts = candidate?.content?.parts;
+                if (Array.isArray(parts)) {
+                  for (const part of parts) {
+                    if (part.text !== undefined) {
+                      const isThinking = isThinkingPart(part);
+                      if (isThinking) {
+                        let thinkBlock = blocks.find((b) => b.type === "thinking") as any;
+                        if (!thinkBlock) {
+                          thinkBlock = { type: "thinking", thinking: "" };
+                          blocks.push(thinkBlock);
+                          stream.push({ type: "thinking_start", contentIndex: blockIndex(), partial: output });
+                        }
+                        thinkBlock.thinking += part.text;
+                        stream.push({ type: "thinking_delta", contentIndex: blockIndex(), delta: part.text, partial: output });
+                      } else {
+                        let textBlock = blocks.find((b) => b.type === "text") as any;
+                        if (!textBlock) {
+                          textBlock = { type: "text", text: "" };
+                          blocks.push(textBlock);
+                          stream.push({ type: "text_start", contentIndex: blockIndex(), partial: output });
+                        }
+                        textBlock.text += part.text;
+                        stream.push({ type: "text_delta", contentIndex: blockIndex(), delta: part.text, partial: output });
+                      }
+                    } else if (part.functionCall) {
+                      const fc = part.functionCall;
+                      const toolCallId = fc.id || `${fc.name}_${Date.now()}_${++toolCallCounter}`;
+                      const toolCall = {
+                        type: "toolCall" as const,
+                        id: toolCallId,
+                        name: String(fc.name || ""),
+                        arguments: (fc.args as Record<string, any>) ?? {},
+                      };
+                      blocks.push(toolCall);
+                      stream.push({
+                        type: "toolcall_start",
+                        contentIndex: blockIndex(),
+                        partial: output,
+                      });
+                      stream.push({
+                        type: "toolcall_delta",
+                        contentIndex: blockIndex(),
+                        delta: JSON.stringify(toolCall.arguments),
+                        partial: output,
+                      });
+                      stream.push({
+                        type: "toolcall_end",
+                        contentIndex: blockIndex(),
+                        toolCall,
+                        partial: output,
+                      });
+                    }
+                  }
+                }
+                if (candidate?.finishReason) {
+                  output.stopReason = candidate.finishReason === "STOP" ? "stop" : candidate.finishReason === "MAX_TOKENS" ? "length" : "toolUse";
+                }
+              } catch {
+                // Ignore SSE chunk parse error
+              }
+            }
+          }
+        }
+
+        if (output.stopReason === "pending") {
+          output.stopReason = blocks.some((b) => b.type === "toolCall") ? "toolUse" : "stop";
+        }
+        const doneReason = output.stopReason === "toolUse" || output.stopReason === "length" ? output.stopReason : "stop";
+        stream.push({ type: "done", reason: doneReason, message: output });
+        stream.end();
+      } catch (err: any) {
+        output.stopReason = options?.signal?.aborted ? "aborted" : "error";
+        output.errorMessage = err instanceof Error ? err.message : String(err);
+        stream.push({ type: "error", reason: output.stopReason, error: output });
+        stream.end();
+      }
+    })();
+
+    return stream;
+  };
+}
+
 export function mapProviderModelToPi(provider: Provider, model: Model, limits?: PiModelLimits, sessionId?: string): PiMappingResult {
+  if (!model.modelId) return { ok: false, reason: "模型缺少 modelId，无法映射到 pi 引擎" };
+
+  // Google Gemini OAuth: 使用已登录 Google 账号走 Antigravity Code Assist streamSimple
+  if (
+    provider.id === "google-gemini-oauth" ||
+    provider.id === "2b6c1f84-73ad-4e35-b0c7-1a9e4d5f8c21" ||
+    provider.name.toLowerCase().includes("gemini oauth") ||
+    provider.oauth?.flow === ("gemini-oauth" as any)
+  ) {
+    if (geminiAccountRepository.listAccounts().length === 0) {
+      return { ok: false, reason: "请先在「设置 > 供应商 > Gemini (OAuth)」中登录 Google 账号" };
+    }
+    const headers: Record<string, string> = {};
+    applyModelRequestHeaders(headers, provider, model, sessionId);
+
+    const contextWindow =
+      typeof limits?.contextWindow === "number" && limits.contextWindow > 0
+        ? limits.contextWindow
+        : 1_048_576;
+    const maxTokens =
+      typeof limits?.maxTokens === "number" && limits.maxTokens > 0 ? limits.maxTokens : DEFAULT_OUTPUT_TOKENS;
+
+    const config: ProviderConfigInput = {
+      name: provider.name,
+      baseUrl: "https://daily-cloudcode-pa.googleapis.com",
+      apiKey: "unused-gemini-oauth",
+      api: "google-generative-ai",
+      streamSimple: createGeminiOAuthStreamSimple(provider),
+      ...(Object.keys(headers).length ? { headers } : {}),
+      models: [
+        {
+          id: model.modelId,
+          name: model.displayName || model.modelId,
+          reasoning: model.abilities.includes("REASONING"),
+          input: model.inputModalities.includes("IMAGE") ? ["text", "image"] : ["text"],
+          cost: ZERO_COST,
+          contextWindow,
+          maxTokens,
+          thinkingLevelMap: { off: "none", xhigh: "xhigh", max: "max" },
+        },
+      ],
+    };
+
+    return {
+      ok: true,
+      mapping: {
+        kind: "registered",
+        providerId: provider.id,
+        modelId: model.modelId,
+        config,
+        provider,
+      },
+    };
+  }
+
   if (!model.modelId) return { ok: false, reason: "模型缺少 modelId，无法映射到 pi 引擎" };
 
   // 订阅供应商:身份译成 pi 内建 provider id,其余交给内建定义(见 PiModelMapping 头注)。

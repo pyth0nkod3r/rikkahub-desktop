@@ -14,6 +14,7 @@ import { cn } from "~/lib/utils";
 import api from "~/services/api";
 import type { ProviderModel } from "~/types";
 import { AIIcon } from "~/components/ui/ai-icon";
+import { SearchInput } from "~/components/ui/search-input";
 import { Button } from "~/components/ui/button";
 import {
   DropdownMenu,
@@ -117,6 +118,7 @@ export function ModelListImpl({ disabled = false, className, onChanged }: ModelL
   const reasoningLabel = useCurrentReasoningLabel();
 
   const [updatingModelId, setUpdatingModelId] = React.useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = React.useState("");
 
   const currentModelId = currentAssistant?.chatModelId ?? settings?.chatModelId ?? null;
   // Claude 订阅(Pro/Max,chatCapable=false)仅工作区可选:聊天列的选择器隐藏该供应商
@@ -175,6 +177,22 @@ export function ModelListImpl({ disabled = false, className, onChanged }: ModelL
         ?.providerId ?? null,
     [sections, currentModelId],
   );
+
+  const filteredSections = React.useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return [];
+    return sections
+      .map((sec) => ({
+        ...sec,
+        models: sec.models.filter(
+          (m) =>
+            m.modelId.toLowerCase().includes(q) ||
+            (m.displayName || "").toLowerCase().includes(q) ||
+            sec.providerName.toLowerCase().includes(q),
+        ),
+      }))
+      .filter((sec) => sec.models.length > 0);
+  }, [sections, searchQuery]);
 
   const currentModelLabel = currentModel
     ? getModelDisplayName(currentModel.displayName, currentModel.modelId)
@@ -277,8 +295,35 @@ export function ModelListImpl({ disabled = false, className, onChanged }: ModelL
         </Button>
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="end" className="min-w-[200px]">
-        {sections.length === 0 ? (
+      <DropdownMenuContent align="end" className="min-w-[240px] max-w-[320px] p-1.5 space-y-1">
+        <div className="pb-1" onKeyDown={(e) => e.stopPropagation()}>
+          <SearchInput
+            value={searchQuery}
+            onValueChange={setSearchQuery}
+            placeholder={t("model_list.search_placeholder", "Search models...")}
+            clearLabel="Clear"
+            className="w-full"
+          />
+        </div>
+
+        {searchQuery.trim() ? (
+          <div className="max-h-[300px] overflow-y-auto space-y-1">
+            {filteredSections.length === 0 ? (
+              <div className="px-3 py-4 text-center text-xs text-muted-foreground">
+                No matching models found
+              </div>
+            ) : (
+              filteredSections.map((section) => (
+                <div key={section.providerId} className="space-y-0.5">
+                  <div className="px-2 py-1 text-micro font-semibold uppercase tracking-wider text-muted-foreground border-t border-border/40 first:border-t-0">
+                    {section.providerName}
+                  </div>
+                  {renderModelItems(section.models)}
+                </div>
+              ))
+            )}
+          </div>
+        ) : sections.length === 0 ? (
           <div className="px-[10px] py-2 text-compact text-[var(--ds-text-tertiary)]">
             {t("model_list.empty")}
           </div>

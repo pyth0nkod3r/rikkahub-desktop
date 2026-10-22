@@ -35,8 +35,8 @@ export async function handleProviderAccountRoutes(
     }
     if (type === "chatgpt" || type === "codex") {
       try {
-        const { authUrl } = await codexOAuthManager.startLogin();
-        return json({ authUrl });
+        const loginRes = await codexOAuthManager.startLogin();
+        return json(loginRes);
       } catch (err) {
         return error(err instanceof Error ? err.message : "Failed to start Codex login", 500);
       }
@@ -55,7 +55,22 @@ export async function handleProviderAccountRoutes(
     return json({ status: { phase: "idle" } });
   }
 
-  // 4. Cancel login
+  // 4. Submit manual code / callback URL
+  if (path === "settings/providers/accounts/submit-code" && request.method === "POST") {
+    if (type === "chatgpt" || type === "codex") {
+      try {
+        const body = await readJson<{ code?: string }>(request);
+        if (!body.code?.trim()) return error("Code or redirect URL is required", 400);
+        const account = await codexOAuthManager.submitManualCode(body.code.trim());
+        return json({ success: true, account });
+      } catch (err) {
+        return error(err instanceof Error ? err.message : "Failed to submit code", 500);
+      }
+    }
+    return error("Manual code submission not supported for this provider", 400);
+  }
+
+  // 5. Cancel login
   if (path === "settings/providers/accounts/cancel" && request.method === "POST") {
     if (type === "gemini") {
       geminiOAuthManager.cancelLogin();
@@ -68,7 +83,7 @@ export async function handleProviderAccountRoutes(
     return json({ ok: true });
   }
 
-  // 5. Account operations on specific account ID: /settings/providers/accounts/:id
+  // 6. Account operations on specific account ID: /settings/providers/accounts/:id
   const match = path.match(/^settings\/providers\/accounts\/([^/]+)(?:\/(.*))?$/);
   if (!match) return null;
 
@@ -105,13 +120,15 @@ export async function handleProviderAccountRoutes(
 
   // Delete account
   if (!sub && request.method === "DELETE") {
-    let deleted = false;
     if (type === "gemini") {
-      deleted = geminiAccountRepository.deleteAccount(accountId);
-    } else if (type === "chatgpt" || type === "codex") {
-      deleted = codexAccountRepository.deleteAccount(accountId);
+      const ok = geminiAccountRepository.deleteAccount(accountId);
+      return json({ ok });
     }
-    return json({ ok: deleted });
+    if (type === "chatgpt" || type === "codex") {
+      const ok = codexAccountRepository.deleteAccount(accountId);
+      return json({ ok });
+    }
+    return error("Unsupported type", 400);
   }
 
   return null;

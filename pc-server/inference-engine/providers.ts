@@ -13,6 +13,7 @@ import {
   claudeBlocksFromUiParts,
 } from "./message-builder";
 import { ensureReasoningPart, finishReasoningParts, normalizeGeneratedImageUrl } from "./parts";
+import { geminiAccountRepository } from "../model-providers/gemini-oauth/repository";
 import type { StreamHooksWithSink, ToolCall, ToolResult } from "./events";
 import {
   findModel,
@@ -723,13 +724,14 @@ function applyGoogleRoundChunk(
   assistant: Assistant,
 ) {
   if (!raw || typeof raw !== "object") return;
-  const blockReason = raw.promptFeedback?.blockReason;
+  const data = raw.response || raw;
+  const blockReason = data.promptFeedback?.blockReason;
   if (blockReason) throw new UpstreamStreamError(`Gemini blocked: ${blockReason}`);
-  const meta = raw.usageMetadata;
+  const meta = data.usageMetadata;
   // P1-3:merge 而非覆写——Google 流式末尾 chunk 的 usageMetadata 可能缺
   // cachedContentTokenCount,覆写会把前面 chunk 已报的命中数清零。
   if (meta) result.usage = mergeTokenUsage(result.usage ?? null, googleUsageFromMeta(meta) ?? null) ?? undefined;
-  const candidate = raw.candidates?.[0];
+  const candidate = data.candidates?.[0];
   const parts = candidate?.content?.parts;
   if (!Array.isArray(parts)) return;
   for (const part of parts) {
@@ -877,12 +879,24 @@ export async function streamGoogleChatWithTools(
   signal: AbortSignal | undefined,
   hooks: StreamHooksWithSink,
 ) {
-  // P1-5:循环骨架统一到 runStreamingToolLoop,本函数只保留 Google 特定的 Round Adapter。
-  // issue10:鉴权已移入 headers 的 x-goog-api-key(调用方设置),URL 不再带 ?key=。
-  const streamUrl = `${baseUrl.replace(/\/+$/, "")}/models/${modelId}:streamGenerateContent?alt=sse`;
-  // 专题9:助手关闭"流式输出"时走 generateContent(非流式);Gemini 的流式/非流式区别在
-  // URL 而非请求体,makeNonStreamBody 为恒等,由 fetchRound 按 nonStream 切换端点。
-  const jsonUrl = `${baseUrl.replace(/\/+$/, "")}/models/${modelId}:generateContent`;
+  const isGeminiOAuth =
+    providerItem.id === "google-gemini-oauth" ||
+    providerItem.id === "2b6c1f84-73ad-4e35-b0c7-1a9e4d5f8c21" ||
+    providerItem.name.toLowerCase().includes("gemini oauth") ||
+    providerItem.authMode === "oauth";
+
+  const effectiveBase = isGeminiOAuth && (baseUrl.includes("cloudaicompanion.googleapis.com") || !baseUrl)
+    ? "https://daily-cloudcode-pa.googleapis.com"
+    : baseUrl;
+
+  const streamUrl = isGeminiOAuth
+    ? `${effectiveBase.replace(/\/+$/, "")}/v1internal:streamGenerateContent?alt=sse`
+    : `${baseUrl.replace(/\/+$/, "")}/models/${modelId}:streamGenerateContent?alt=sse`;
+
+  const jsonUrl = isGeminiOAuth
+    ? `${effectiveBase.replace(/\/+$/, "")}/v1internal:generateContent`
+    : `${baseUrl.replace(/\/+$/, "")}/models/${modelId}:generateContent`;
+
   let contents = Array.isArray(body.contents) ? [...body.contents] : [];
   const initialBody: Record<string, unknown> = { ...body, contents };
 
@@ -890,13 +904,27 @@ export async function streamGoogleChatWithTools(
     providerItem,
     logUrl: streamUrl,
     logHeaders: headers,
-    fetchRound: (requestBody, _round, sig, nonStream) => fetch(nonStream ? jsonUrl : streamUrl, {
-      method: "POST",
-      headers: nonStream ? headers : { ...headers, Accept: "text/event-stream" },
-      body: JSON.stringify(requestBody),
-      signal: sig,
-      // Bun timeout 由 net.ts fetch 拦截器统一注入 timeout:0(见 Claude 适配器处注释)。
-    }),
+    fetchRound: (requestBody, _round, sig, nonStream) => {
+      let finalBody: any = requestBody;
+      if (isGeminiOAuth) {
+        let projectId = "default-project";
+        try {
+          const acc = geminiAccountRepository.listAccounts().find((a) => a.enabled && a.tokenStatus !== "INVALID");
+          if (acc?.projectId) projectId = acc.projectId;
+        } catch {}
+        finalBody = {
+          project: projectId,
+          model: modelId,
+          request: requestBody,
+        };
+      }
+      return fetch(nonStream ? jsonUrl : streamUrl, {
+        method: "POST",
+        headers: nonStream ? headers : { ...headers, Accept: "text/event-stream" },
+        body: JSON.stringify(finalBody),
+        signal: sig,
+      });
+    },
     // R3-1:头超时统一 600s(流式/非流式同值,用户需求 2026-08-01:非流式对齐流式,
     // 理由同 Claude/OpenAI 适配器处注释)。
     headerTimeoutMs: () => 600_000,

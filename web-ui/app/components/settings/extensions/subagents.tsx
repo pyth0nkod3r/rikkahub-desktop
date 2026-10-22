@@ -1,3 +1,156 @@
+
+function SubAgentModelPicker({
+  value,
+  onChange,
+  providers,
+}: {
+  value: string | null;
+  onChange: (modelId: string | null) => void;
+  providers: any[];
+}) {
+  const [open, setOpen] = React.useState(false);
+  const [search, setSearch] = React.useState("");
+
+  const groups = React.useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const result: Array<{ providerId: string; providerName: string; models: Array<{ id: string; modelId: string; name: string }> }> = [];
+
+    for (const p of providers || []) {
+      if (!p.enabled) continue;
+      const matchedModels = (p.models || [])
+        .filter((m: any) => m.type === "CHAT")
+        .map((m: any) => ({
+          id: m.id,
+          modelId: m.modelId,
+          name: m.displayName || m.modelId,
+        }))
+        .filter((m: any) => {
+          if (!q) return true;
+          return (
+            m.name.toLowerCase().includes(q) ||
+            m.modelId.toLowerCase().includes(q) ||
+            p.name.toLowerCase().includes(q)
+          );
+        });
+
+      if (matchedModels.length > 0) {
+        result.push({
+          providerId: p.id,
+          providerName: p.name,
+          models: matchedModels,
+        });
+      }
+    }
+    return result;
+  }, [providers, search]);
+
+  const selectedModel = React.useMemo(() => {
+    if (!value) return null;
+    for (const p of providers || []) {
+      for (const m of p.models || []) {
+        if (m.id === value) {
+          return { id: m.id, modelId: m.modelId, name: m.displayName || m.modelId, providerName: p.name };
+        }
+      }
+    }
+    return null;
+  }, [providers, value]);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full justify-between h-9 px-3 text-xs font-normal bg-background"
+        >
+          <div className="flex items-center gap-2 truncate">
+            {selectedModel ? (
+              <>
+                <AIIcon name={selectedModel.modelId} size={16} className="bg-transparent shrink-0" />
+                <span className="truncate">{selectedModel.name}</span>
+                <span className="text-muted-foreground text-micro">({selectedModel.providerName})</span>
+              </>
+            ) : (
+              <span className="text-muted-foreground">Inherit from parent assistant</span>
+            )}
+          </div>
+          <ChevronDown className="size-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[360px] p-2 space-y-2" align="start">
+        <SearchInput
+          value={search}
+          onValueChange={setSearch}
+          placeholder="Search models or providers..."
+          clearLabel="Clear"
+          className="w-full"
+        />
+        <div className="max-h-[280px] overflow-y-auto space-y-2 pr-1">
+          <button
+            type="button"
+            className={cn(
+              "flex items-center justify-between w-full px-2.5 py-1.5 rounded-md text-xs hover:bg-accent text-left transition-colors",
+              !value && "bg-accent/70 font-medium"
+            )}
+            onClick={() => {
+              onChange(null);
+              setOpen(false);
+            }}
+          >
+            <span>Inherit from parent assistant</span>
+            {!value ? <Check className="size-3.5 text-primary" /> : null}
+          </button>
+
+          {groups.length === 0 ? (
+            <div className="py-6 text-center text-xs text-muted-foreground">
+              No matching models found
+            </div>
+          ) : (
+            groups.map((group) => (
+              <div key={group.providerId} className="space-y-1">
+                <div className="px-2 pt-1 text-micro font-semibold uppercase tracking-wider text-muted-foreground border-t border-border/40">
+                  {group.providerName}
+                </div>
+                {group.models.map((m) => {
+                  const isSelected = m.id === value;
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      className={cn(
+                        "flex items-center justify-between w-full px-2.5 py-1.5 rounded-md text-xs hover:bg-accent text-left gap-2 transition-colors",
+                        isSelected && "bg-accent/70 font-medium"
+                      )}
+                      onClick={() => {
+                        onChange(m.id);
+                        setOpen(false);
+                      }}
+                    >
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <AIIcon name={m.modelId} size={16} className="bg-transparent shrink-0" />
+                        <span className="truncate">{m.name}</span>
+                        {m.modelId !== m.name && (
+                          <span className="text-micro text-muted-foreground font-mono truncate max-w-[120px]">
+                            {m.modelId}
+                          </span>
+                        )}
+                      </div>
+                      {isSelected ? <Check className="size-3.5 text-primary shrink-0" /> : null}
+                    </button>
+                  );
+                })}
+              </div>
+            ))
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 // components/settings/extensions/subagents.tsx — Settings > Extensions > Sub-Agents
 // Ported from rikkahub-agent (Pyth0nkod3r fork) SettingSubAgentsPage.kt
 
@@ -13,6 +166,10 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "~/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "~/components/ui/popover";
+import { AIIcon } from "~/components/ui/ai-icon";
+import { SearchInput } from "~/components/ui/search-input";
+import { Check, ChevronDown } from "lucide-react";
 import { Input } from "~/components/ui/input";
 import { Switch } from "~/components/ui/switch";
 import { Textarea } from "~/components/ui/textarea";
@@ -334,24 +491,11 @@ export function SubAgentsSection({ settings }: { settings: Settings; onSettings:
                 </SettingsField>
 
                 <SettingsField label={t("settings:subagents.model_label", "Assigned Model")}>
-                  <Select
-                    value={draft.modelId || "inherit"}
-                    onValueChange={(val) => setDraft({ ...draft, modelId: val === "inherit" ? null : val })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Inherit from Parent Assistant" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="inherit">
-                        {t("settings:subagents.inherit_model", "Inherit from parent assistant")}
-                      </SelectItem>
-                      {allModels.map((m) => (
-                        <SelectItem key={m.id} value={m.id}>
-                          {m.name} ({m.providerName})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <SubAgentModelPicker
+                    value={draft.modelId}
+                    onChange={(val) => setDraft({ ...draft, modelId: val })}
+                    providers={settings.providers ?? []}
+                  />
                 </SettingsField>
 
                 <SettingsField label={t("settings:subagents.enabled_label", "Enabled")}>
