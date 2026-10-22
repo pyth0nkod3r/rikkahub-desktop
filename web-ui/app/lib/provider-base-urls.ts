@@ -20,6 +20,7 @@ export const BUILTIN_BASE_URLS: Record<string, string> = {
   "1eeea727-9ee5-4cae-93e6-6fb01a4d051e": "https://api.openai.com/v1",
   "b2c7e1a4-9f3d-4a6e-8c1b-5d7f9e2a3b14": "https://api.anthropic.com/v1",
   "6ab18148-c138-4394-a46f-1cd8c8ceaa6d": "https://generativelanguage.googleapis.com/v1beta",
+  "google-gemini-oauth": "https://cloudaicompanion.googleapis.com",
   "ff3cde7e-0f65-43d7-8fb2-6475c99f5990": "https://api.x.ai/v1",
   "f099ad5b-ef03-446d-8e78-7e36787f780b": "https://api.deepseek.com/v1",
   "f76cae46-069a-4334-ab8e-224e4979e58c": "https://dashscope.aliyuncs.com/compatible-mode/v1",

@@ -124,6 +124,7 @@ describe("2.0.0-preview-v4 预置供应商重排迁移", () => {
       "Anthropic",
       "Claude",
       "Gemini",
+      "Gemini (OAuth)",
       "xAI",
       "Grok",
       "钠API",

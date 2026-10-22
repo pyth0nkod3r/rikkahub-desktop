@@ -11,6 +11,8 @@ import type { Provider } from "../../foundation/types";
 import { providerHeaders } from "../index";
 import { createPiCredentialStore } from "./credential-store";
 import { OAUTH_FLOWS, loadOAuthFlow, oauthFlowFor } from "./flows";
+import { geminiAccountRepository, antigravityHeaders, GEMINI_CODE_ASSIST_ENDPOINT } from "../gemini-oauth/repository";
+import { codexAccountRepository, CODEX_BASE_URL } from "../codex-oauth/repository";
 
 export interface ResolvedProviderAuth {
   /** 引擎注入用:apiKey 轨返回 providerHeaders() 原样;oauth 轨返回 toAuth 的
@@ -31,6 +33,36 @@ export async function resolveProviderAuthForProvider(
   provider: Provider,
   opts?: { signal?: AbortSignal; minOAuthValidityMs?: number },
 ): Promise<ResolvedProviderAuth> {
+  // 1. Google Gemini OAuth Multi-Account Round-Robin
+  if (provider.id === "google-gemini-oauth" || provider.oauth?.flow === ("gemini-oauth" as any)) {
+    const acc = await geminiAccountRepository.acquireAccount();
+    return {
+      headers: antigravityHeaders(acc.accessToken),
+      baseUrl: GEMINI_CODE_ASSIST_ENDPOINT,
+      accountId: acc.id,
+    };
+  }
+
+  // 2. ChatGPT (Codex) OAuth Multi-Account Round-Robin
+  if (
+    (provider.id === "98d0557b-0700-41e5-b1d6-ee875a53ae5a" || provider.oauth?.flow === "openai-codex") &&
+    codexAccountRepository.listAccounts().length > 0
+  ) {
+    const acc = await codexAccountRepository.acquireAccount();
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${acc.accessToken}`,
+      originator: "codex_cli_rs",
+    };
+    if (acc.chatgptAccountId) {
+      headers["ChatGPT-Account-Id"] = acc.chatgptAccountId;
+    }
+    return {
+      headers,
+      baseUrl: CODEX_BASE_URL,
+      accountId: acc.id,
+    };
+  }
+
   if (provider.authMode !== "oauth" || !provider.oauth) {
     // 订阅供应商已登出(oauth 行被剥)却仍被宿主路径选中:不能落回 providerHeaders()
     // 轨——那会拿空 apiKey 拼出裸 `Authorization: Bearer`(把"重新登录"的信号伪装成

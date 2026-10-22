@@ -68,6 +68,7 @@ import {
   providerKind,
 } from "~/components/settings/providers/common";
 import { ProviderLoginPanel } from "~/components/settings/providers/login-panel";
+import { MultiAccountPool } from "~/components/settings/providers/multi-account-pool";
 import { ProviderModelList } from "~/components/settings/providers/model-list";
 import { ProviderTestPanel } from "~/components/settings/providers/test-panel";
 
@@ -488,10 +489,24 @@ export function ProvidersSection({
               // 用 draft 会让卡片在登出/登录后仍停留在旧状态。
               // key 绑 provider.id:切换供应商时强制重挂载,清掉上次残留的 manualCode/textInput/
               // 已打开授权 URL 等瞬态——否则 A 供应商输入的授权码会带进 B 的登录框。
-              <ProviderLoginPanel key={(selected ?? draft).id} provider={selected ?? draft} />
+              draft.id === "google-gemini-oauth" ? (
+                <MultiAccountPool key={(selected ?? draft).id} provider={selected ?? draft} accountType="gemini" />
+              ) : (
+                <div className="space-y-4">
+                  <ProviderLoginPanel key={(selected ?? draft).id} provider={selected ?? draft} />
+                  {(draft.name.toLowerCase().includes("chatgpt") ||
+                    draft.id === "98d0557b-0700-41e5-b1d6-ee875a53ae5a" ||
+                    draft.id === "e5787ce2-598e-49b0-9889-cb4a6ec7c014") && (
+                    <MultiAccountPool key={`pool-${(selected ?? draft).id}`} provider={selected ?? draft} accountType="chatgpt" />
+                  )}
+                </div>
+              )
             ) : (
               <SettingsField
                 label="API Key"
+                hint={t("settings:providers.api_key_multi_hint", {
+                  defaultValue: "支持输入多个 API Key (英文逗号或换行分隔)，请求时自动按 Round-Robin / LRU 轮询使用",
+                })}
                 trailing={
                   getKeyUrl ? (
                     <button
@@ -506,7 +521,11 @@ export function ProvidersSection({
                   ) : undefined
                 }
               >
-                <PasswordInput value={textValue(draft.apiKey)} onChange={(apiKey) => patchDraft({ apiKey })} />
+                <PasswordInput
+                  value={textValue(draft.apiKey)}
+                  onChange={(apiKey) => patchDraft({ apiKey })}
+                  placeholder="sk-... (支持多个 Key，以英文逗号或换行分隔)"
+                />
               </SettingsField>
             )}
           </SettingsGroup>

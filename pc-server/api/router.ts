@@ -19,8 +19,10 @@ import { handleSubAgentRoutes } from "./handlers/subagents";
 import { handleAutomationRoutes } from "./handlers/automation";
 import { handleRemoteRoutes } from "./handlers/remote";
 import { handleBrowserRoutes } from "./handlers/browser";
+import { handleProviderAccountRoutes } from "./handlers/provider-accounts";
 
 const handlers = [
+  handleProviderAccountRoutes,
   handleSystemRoutes,
   handleSettingsRoutes,
   handleMemoryRoutes,

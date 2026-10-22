@@ -169,6 +169,7 @@ export const OAUTH_PROVIDER_ANCHOR_AFTER: Record<string, string> = {
   [OAUTH_PROVIDER_IDS["xai"]]: "ff3cde7e-0f65-43d7-8fb2-6475c99f5990", // → xAI(P2)
   [OAUTH_PROVIDER_IDS["anthropic"]]: "b2c7e1a4-9f3d-4a6e-8c1b-5d7f9e2a3b14", // → Anthropic(P3)
   [OAUTH_PROVIDER_IDS["github-copilot"]]: "386e0f29-8228-4512-affe-8fd8add82d88", // → Vercel(P2)
+  "google-gemini-oauth": "6ab18148-c138-4394-a46f-1cd8c8ceaa6d", // → Gemini
 };
 
 // 预置供应商期望顺序(按 id;2026-09-26 用户重排:钠API 前置于 DeepSeek、智谱/月之暗面
@@ -179,6 +180,7 @@ const BUILTIN_PROVIDER_ORDER: readonly string[] = [
   "1eeea727-9ee5-4cae-93e6-6fb01a4d051e", // OpenAI
   "b2c7e1a4-9f3d-4a6e-8c1b-5d7f9e2a3b14", // Anthropic
   "6ab18148-c138-4394-a46f-1cd8c8ceaa6d", // Gemini
+  "google-gemini-oauth", // Gemini (OAuth)
   "ff3cde7e-0f65-43d7-8fb2-6475c99f5990", // xAI
   "e7a2b5c3-8f4d-4e6a-9b1c-3d5f7e8a2c04", // 钠API
   "f099ad5b-ef03-446d-8e78-7e36787f780b", // DeepSeek
@@ -273,6 +275,19 @@ export function defaultProviders(): Provider[] {
       enabled: true,
       shortDescription: "谷歌官方 Gemini API",
       models: [model("gemini-2.5-flash"), model("gemini-2.5-pro")],
+    }),
+    provider({
+      id: "google-gemini-oauth",
+      type: "google",
+      name: "Gemini (OAuth)",
+      baseUrl: "https://cloudaicompanion.googleapis.com",
+      enabled: false,
+      shortDescription: "使用 Google 账号 OAuth 登录 (支持多账号轮询与配额查询)",
+      authMode: "oauth",
+      models: [
+        model("gemini-2.5-flash", "Gemini 2.5 Flash"),
+        model("gemini-2.5-pro", "Gemini 2.5 Pro"),
+      ],
     }),
     provider({ id: "ff3cde7e-0f65-43d7-8fb2-6475c99f5990", name: "xAI", baseUrl: "https://api.x.ai/v1", useResponseApi: true }),
     // Grok 订阅紧跟「xAI」(同家)。pi 口径:api.x.ai/v1 responses(scope 含 api:access)。
@@ -408,6 +423,8 @@ export function textBody(value: string, limit?: number): string {
   return value;
 }
 
+import { keyRoulette } from "./key-roulette";
+
 export function modelsEndpointFor(providerItem: Provider) {
   const base = providerItem.baseUrl.replace(/\/+$/, "");
   if (providerItem.type === "google") return `${base}/models?pageSize=100`;
@@ -418,12 +435,13 @@ export function modelsEndpointFor(providerItem: Provider) {
 
 export function providerHeaders(providerItem: Provider) {
   const headers: Record<string, string> = {};
-  if (providerItem.type === "openai") headers.Authorization = `Bearer ${providerItem.apiKey}`;
+  const activeKey = keyRoulette.next(providerItem.apiKey, providerItem.id);
+  if (providerItem.type === "openai") headers.Authorization = `Bearer ${activeKey}`;
   // issue10: Gemini 鉴权统一走 x-goog-api-key 头（与安卓非 Vertex 路径、Cherry Studio 一致）。
   // 之前用 ?key= query，官方 API 两者都收，但主流中转网关只解析 header，query 会被判 invalid key。
-  if (providerItem.type === "google") headers["x-goog-api-key"] = providerItem.apiKey;
+  if (providerItem.type === "google") headers["x-goog-api-key"] = activeKey;
   if (providerItem.type === "claude") {
-    headers["x-api-key"] = providerItem.apiKey;
+    headers["x-api-key"] = activeKey;
     headers["anthropic-version"] = "2023-06-01";
   }
   return headers;
