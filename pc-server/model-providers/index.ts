@@ -131,7 +131,11 @@ export function provider(input: Partial<Provider> & Pick<Provider, "id" | "name"
 // 一次性下架的预置供应商(合作终止或清单精简)。它们已从 defaultProviders/defaultTtsProviders
 // 移除,但老用户 state 里可能还存着 —— normalize 时做一次清理:只删用户从未真正使用(未填
 // apiKey)的;已配 key 的保留,避免静默删掉用户的接入凭据。
-export const SUNSET_PROVIDER_IDS = new Set<string>([
+export const DEFAULT_CODEX_PROVIDER_ID = "7ce7e322-b995-4b0c-9d48-42e08dcfcdda";
+export const DEFAULT_GEMINI_OAUTH_PROVIDER_ID = "2b6c1f84-73ad-4e35-b0c7-1a9e4d5f8c21";
+
+export const SUNSET_PROVIDER_IDS = new Set<string>();
+const _OBSOLETE_SUNSET_IDS = new Set<string>([
   "1b1395ed-b702-4aeb-8bc1-b681c4456953", // AiHubMix
   "da020a90-f7b3-4c29-b90e-c511a0630630", // 小马算力
   "da93779f-3956-48cc-82ef-67bb482eaaf7", // 302.AI
@@ -164,12 +168,14 @@ export const OAUTH_PROVIDER_IDS: Record<string, string> = Object.fromEntries(
 // 补插/归位时移到锚点之后。锚点 = 同家 API 预置的 id;锚点被用户删除/墓碑时归位跳过
 // (保持补插的尾部默认位)。Copilot 无同家 API 预置,用户指定贴在 Vercel 之后。
 export const OAUTH_PROVIDER_ANCHOR_AFTER: Record<string, string> = {
-  [OAUTH_PROVIDER_IDS["openai-codex"]]: "1eeea727-9ee5-4cae-93e6-6fb01a4d051e", // → OpenAI
+  "7ce7e322-b995-4b0c-9d48-42e08dcfcdda": "1eeea727-9ee5-4cae-93e6-6fb01a4d051e", // Codex → OpenAI
+  [OAUTH_PROVIDER_IDS["openai-codex"]]: "7ce7e322-b995-4b0c-9d48-42e08dcfcdda", // ChatGPT → Codex
   [OAUTH_PROVIDER_IDS["kimi-coding"]]: "d6c4d8c6-3f62-4ca9-a6f3-7ade6b15ecc3", // → 月之暗面
   [OAUTH_PROVIDER_IDS["xai"]]: "ff3cde7e-0f65-43d7-8fb2-6475c99f5990", // → xAI(P2)
   [OAUTH_PROVIDER_IDS["anthropic"]]: "b2c7e1a4-9f3d-4a6e-8c1b-5d7f9e2a3b14", // → Anthropic(P3)
   [OAUTH_PROVIDER_IDS["github-copilot"]]: "386e0f29-8228-4512-affe-8fd8add82d88", // → Vercel(P2)
   "google-gemini-oauth": "6ab18148-c138-4394-a46f-1cd8c8ceaa6d", // → Gemini
+  "2b6c1f84-73ad-4e35-b0c7-1a9e4d5f8c21": "6ab18148-c138-4394-a46f-1cd8c8ceaa6d", // → Gemini
 };
 
 // 预置供应商期望顺序(按 id;2026-09-26 用户重排:钠API 前置于 DeepSeek、智谱/月之暗面
@@ -177,7 +183,9 @@ export const OAUTH_PROVIDER_ANCHOR_AFTER: Record<string, string> = {
 // 供应商排到对应位置,用户新增的自定义供应商不受影响,统一保留在内置供应商之后(保持其
 // 相对顺序)。排序是幂等的:重复执行结果一致,不会反复改动已排好的 state。
 const BUILTIN_PROVIDER_ORDER: readonly string[] = [
+  "a8d2d463-e8c0-41f2-b89e-f5eb8e716cce", // RikkaHub
   "1eeea727-9ee5-4cae-93e6-6fb01a4d051e", // OpenAI
+  "7ce7e322-b995-4b0c-9d48-42e08dcfcdda", // Codex
   "b2c7e1a4-9f3d-4a6e-8c1b-5d7f9e2a3b14", // Anthropic
   "6ab18148-c138-4394-a46f-1cd8c8ceaa6d", // Gemini
   "google-gemini-oauth", // Gemini (OAuth)
@@ -195,6 +203,16 @@ const BUILTIN_PROVIDER_ORDER: readonly string[] = [
   "f4f8870e-82d3-495b-9b64-d58e508b3b2c", // 阶跃星辰
   "d5734028-d39b-4d41-9841-fd648d65440e", // OpenRouter
   "386e0f29-8228-4512-affe-8fd8add82d88", // Vercel
+  "1b1395ed-b702-4aeb-8bc1-b681c4456953", // AiHubMix
+  "2a05506f-3a59-450a-a493-33a82bc85a81", // APIMart
+  "56a94d29-c88b-41c5-8e09-38a7612d6cf8", // 硅基流动
+  "da020a90-f7b3-4c29-b90e-c511a0630630", // 小马算力
+  "da93779f-3956-48cc-82ef-67bb482eaaf7", // 302.AI
+  "aecf04fd-cb5c-4582-aed2-e8bf393923fd", // 随想AI网关
+  "afbc54ad-807e-4455-9594-7d7a546356ad", // MaruCode
+  "b55716c7-e465-4666-a788-4243aab13fb3", // MiniMax (Global)
+  "53027b08-1b58-43d5-90ed-29173203e3d8", // AckAI
+  "4da09554-8844-4cc8-a4a9-fe1b2515e91b", // UnifyLLM
 ];
 
 export function builtinProviderRank(providerItem: Provider): number {
@@ -230,11 +248,38 @@ export function placeOAuthProvidersAfterAnchors(providers: Provider[]): Provider
 export function defaultProviders(): Provider[] {
   return [
     provider({
+      id: "a8d2d463-e8c0-41f2-b89e-f5eb8e716cce",
+      name: "RikkaHub",
+      baseUrl: "https://api.rikka-ai.com/v1",
+      shortDescription: "RikkaHub 官方聚合 API",
+      description: "RikkaHub 官方聚合 API，提供高并发和稳定服务",
+      models: [model("auto", "Auto")],
+    }),
+    provider({
       id: "1eeea727-9ee5-4cae-93e6-6fb01a4d051e",
       name: "OpenAI",
       baseUrl: "https://api.openai.com/v1",
       shortDescription: "OpenAI 官方 API",
       models: [model("gpt-4.1"), model("gpt-4.1-mini"), model("gpt-4o-mini")],
+
+    }),
+    provider({
+      id: "7ce7e322-b995-4b0c-9d48-42e08dcfcdda",
+      name: "Codex",
+      baseUrl: "https://chatgpt.com/backend-api/codex",
+      shortDescription: "OpenAI Codex 专有接口 (支持多账号轮询与配额查询)",
+      authMode: "oauth",
+      useResponseApi: true,
+      models: [
+        model("gpt-5.6-luna", "GPT-5.6 Luna"),
+        model("gpt-5.6", "GPT-5.6"),
+        model("gpt-5.5", "GPT-5.5"),
+        model("gpt-5.4", "GPT-5.4"),
+        model("gpt-5.3", "GPT-5.3"),
+        model("gpt-5.2", "GPT-5.2"),
+        model("gpt-5.1", "GPT-5.1"),
+      ],
+
     }),
     // 订阅制供应商(authMode:"oauth"),紧跟同家 API 预置(用户拍板 2026-09-25:各家贴近各家)。
     // 出厂 enabled:false、apiKey:""、模型目录随包(catalog.ts 登录时铺入)。凭证只在登录后落 oauth 字段。
@@ -378,13 +423,92 @@ export function defaultProviders(): Provider[] {
     provider({
       id: OAUTH_PROVIDER_IDS["github-copilot"],
       name: "Copilot",
-      baseUrl: "https://api.individual.githubcopilot.com",
       shortDescription: "使用 GitHub Copilot 订阅登录,无需 API Key",
+      baseUrl: "https://api.individual.githubcopilot.com",
+
+      authMode: "oauth",
+    }),
+    provider({
+      id: "1b1395ed-b702-4aeb-8bc1-b681c4456953",
+      name: "AiHubMix",
+      baseUrl: "https://aihubmix.com/v1",
+      shortDescription: "支持 gpt, claude, gemini 等 200+ 模型",
+      description: "提供 OpenAI、Claude、Google Gemini 等主流模型的高并发和稳定服务\n官网：https://aihubmix.com",
+    }),
+    provider({
+      id: "2a05506f-3a59-450a-a493-33a82bc85a81",
+      name: "APIMart",
+      baseUrl: "https://api.apimart.ai/v1",
+      shortDescription: "AI 图片/视频生成，GPT-Image-2 低至 $0.006/张",
+      description: "APIMart 是专注 AI 图片/视频生成的低价 API 平台，GPT-Image-2 低至 $0.006/张，1 美元可出图 160+ 张。图片、视频一套异步 API 通吃，提交任务拿 ID、回调取结果，跑批万张不超时、换模型不改代码。按量付费、无月费。",
+    }),
+    provider({
+      id: "56a94d29-c88b-41c5-8e09-38a7612d6cf8",
+      name: "硅基流动",
+      baseUrl: "https://api.siliconflow.cn/v1",
+      shortDescription: "SiliconCloud 硅基流动大模型云服务",
+    }),
+    provider({
+      id: "da020a90-f7b3-4c29-b90e-c511a0630630",
+      name: "小马算力",
+      baseUrl: "https://api.tokenpony.cn/v1",
+      shortDescription: "提供国产模型的API网关服务，使用统一接口接入多种模型",
+      description: "小马算力是一家提供国产模型的API网关服务，使用统一接口接入多种模型\n官网: https://www.tokenpony.cn/79clb",
+    }),
+    provider({
+      id: "da93779f-3956-48cc-82ef-67bb482eaaf7",
+      name: "302.AI",
+      baseUrl: "https://api.302.ai/v1",
+      shortDescription: "企业级 AI 聚合平台",
+      description: "企业级AI服务, 官网：https://302.ai/",
+    }),
+    provider({
+      id: "aecf04fd-cb5c-4582-aed2-e8bf393923fd",
+      name: "随想AI网关",
+      baseUrl: "https://sui-xiang.com/v1",
+      shortDescription: "Claude、Codex、Gemini 等中继服务，1:1 充值",
+      description: "可靠高效的 API 中继服务，提供 Claude、Codex、Gemini 等中继服务。注重隐私·无数据倒卖·无模型掺水，充值额度 1:1，按量付费。多线路冗余、跨区域容灾、自动故障切换，长链路 SSE 不中断。\n官网：https://sui-xiang.com",
+    }),
+    provider({
+      id: "afbc54ad-807e-4455-9594-7d7a546356ad",
+      name: "MaruCode",
+      baseUrl: "https://api.muteki.site/v1",
+      useResponseApi: true,
+      shortDescription: "自营号池，提供 Codex、Claude Code、GPT Image 等主流模型",
+      description: "MaruCode 是一家偶尔做做慈善的小破站 API，自营号池，主要提供 Codex、Claude Code、GPT Image 等主流模型，支持 Websocket 协议，明码标价(Codex 0.25x, CC 1.5x)，透明汇率(1:1)。",
+    }),
+    provider({
+      id: "b55716c7-e465-4666-a788-4243aab13fb3",
+      type: "claude",
+      name: "MiniMax (Global)",
+      baseUrl: "https://api.minimax.io/anthropic/v1",
+      shortDescription: "MiniMax 国际站 Anthropic 兼容端点",
+      promptCaching: false,
+    }),
+    provider({
+      id: "53027b08-1b58-43d5-90ed-29173203e3d8",
+      name: "AckAI",
+      baseUrl: "https://ackai.fun/v1",
+      shortDescription: "无需翻墙，价格官方 5 折",
+      description: "所有AI大模型全都可以用！无需翻墙！价格是官方5折！\n官网：https://ackai.fun",
+    }),
+    provider({
+      id: "4da09554-8844-4cc8-a4a9-fe1b2515e91b",
+      name: "UnifyLLM",
+      baseUrl: "https://apicn.unifyllm.top/v1",
+      shortDescription: "一站式 LLM API 中转平台货源站",
+      description: "一站式LLM API中转平台货源站\n官网：https://www.unifyllm.com/",
+    }),
+  ];
+}
+/*
+
       authMode: "oauth",
     }),
   ];
 }
 
+*/
 export function findModel(modelId: string | null | undefined) {
   const wanted = modelId || state.settings.chatModelId;
   for (const provider of state.settings.providers) {

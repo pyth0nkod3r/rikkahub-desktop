@@ -119,7 +119,9 @@ describe("2.0.0-preview-v4 预置供应商重排迁移", () => {
   test("全新状态:出厂清单即最终顺序(排序+锚点归位收敛到 defaultProviders 序)", () => {
     const state = normalizeState({ settings: { providers: [], assistants: [] } as any } as any);
     expect(state.settings.providers.map((p) => p.name)).toEqual([
+      "RikkaHub",
       "OpenAI",
+      "Codex",
       "ChatGPT",
       "Anthropic",
       "Claude",
@@ -141,6 +143,16 @@ describe("2.0.0-preview-v4 预置供应商重排迁移", () => {
       "OpenRouter",
       "Vercel",
       "Copilot",
+      "AiHubMix",
+      "APIMart",
+      "硅基流动",
+      "小马算力",
+      "302.AI",
+      "随想AI网关",
+      "MaruCode",
+      "MiniMax (Global)",
+      "AckAI",
+      "UnifyLLM",
     ]);
   });
 });

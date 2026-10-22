@@ -71,9 +71,9 @@ export async function fetchProviderModels(providerItem: Provider) {
   // 在第一步就失败。既有 id 按 modelId 保留,刷新目录不换 id。
   if (isOAuthProvider(providerItem)) {
     const flow = oauthFlowFor(providerItem);
-    const models = flow ? bundledModelsFor(flow.id, providerItem.models, providerItem.oauth?.credential) : [];
+    const models = flow ? bundledModelsFor(flow.id, providerItem.models, providerItem.oauth?.credential) : (providerItem.models ?? []);
     return {
-      endpoint: `bundled-catalog://${flow?.piProviderId ?? "unknown"}`,
+      endpoint: `bundled-catalog://${flow?.piProviderId ?? providerItem.name}`,
       models,
       preview: `订阅供应商的模型目录随应用内置(${models.length} 个模型),不经上游模型列表接口获取。`,
     };

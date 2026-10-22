@@ -489,8 +489,10 @@ export function ProvidersSection({
               // 用 draft 会让卡片在登出/登录后仍停留在旧状态。
               // key 绑 provider.id:切换供应商时强制重挂载,清掉上次残留的 manualCode/textInput/
               // 已打开授权 URL 等瞬态——否则 A 供应商输入的授权码会带进 B 的登录框。
-              draft.id === "google-gemini-oauth" ? (
+              draft.id === "google-gemini-oauth" || draft.id === "2b6c1f84-73ad-4e35-b0c7-1a9e4d5f8c21" ? (
                 <MultiAccountPool key={(selected ?? draft).id} provider={selected ?? draft} accountType="gemini" />
+              ) : draft.id === "7ce7e322-b995-4b0c-9d48-42e08dcfcdda" || draft.name.toLowerCase() === "codex" ? (
+                <MultiAccountPool key={(selected ?? draft).id} provider={selected ?? draft} accountType="chatgpt" />
               ) : (
                 <div className="space-y-4">
                   <ProviderLoginPanel key={(selected ?? draft).id} provider={selected ?? draft} />

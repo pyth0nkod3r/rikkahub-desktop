@@ -59,6 +59,15 @@ export function defaultPathForKind(kind: ProviderKind, responseApi = false): str
 // 新增预置供应商时只需在这里加一行 { 子串: 官网 URL }。
 const PROVIDER_GET_KEY_URLS: Array<{ match: RegExp; url: string }> = [
   { match: /naapi\.cc/i, url: "https://naapi.cc/" },
+  { match: /aihubmix\.com/i, url: "https://aihubmix.com" },
+  { match: /apimart\.ai/i, url: "https://go.apimart.ai/gh-rikkahub" },
+  { match: /siliconflow\.cn/i, url: "https://siliconflow.cn/" },
+  { match: /tokenpony\.cn/i, url: "https://www.tokenpony.cn/79clb" },
+  { match: /302\.ai/i, url: "https://302.ai/" },
+  { match: /sui-xiang\.com/i, url: "https://sui-xiang.com" },
+  { match: /muteki\.site/i, url: "https://api.muteki.site/register?aff=Rikkahub&promo=Rikkahub" },
+  { match: /ackai\.fun/i, url: "https://ackai.fun/register?aff=jxpP" },
+  { match: /unifyllm\.(top|com)/i, url: "https://www.unifyllm.com/" },
 ];
 export function providerGetKeyUrl(baseUrl: string): string | null {
   for (const entry of PROVIDER_GET_KEY_URLS) {
