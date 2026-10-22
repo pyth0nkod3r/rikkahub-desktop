@@ -9,7 +9,8 @@ import type { CodexAccount, CodexAccountState, CodexUsageSnapshot } from "./type
 export const CODEX_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
 export const CODEX_AUTHORIZE_URL = "https://auth.openai.com/oauth/authorize";
 export const CODEX_TOKEN_URL = "https://auth.openai.com/oauth/token";
-export const CODEX_BASE_URL = "https://chatgpt.com/backend-api";
+export const CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex";
+export const CODEX_USAGE_URL = "https://chatgpt.com/backend-api/wham/usage";
 
 export function parseJwtPayload(token: string): Record<string, any> {
   try {
@@ -226,7 +227,7 @@ export class CodexAccountRepository {
         headers["ChatGPT-Account-Id"] = fresh.chatgptAccountId;
       }
 
-      const res = await fetch(`${CODEX_BASE_URL}/wham/usage`, { headers });
+      const res = await fetch(CODEX_USAGE_URL, { headers });
       if (!res.ok) {
         if (res.status === 401) {
           const updated = { ...fresh, tokenStatus: "INVALID" as const };
@@ -268,7 +269,7 @@ export class CodexAccountRepository {
     return false;
   }
 
-  private updateAccount(account: CodexAccount): void {
+  updateAccount(account: CodexAccount): void {
     this.state.accounts = this.state.accounts.map((a) => (a.id === account.id ? account : a));
     this.write();
   }

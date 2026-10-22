@@ -153,15 +153,17 @@ export async function fetchProviderModels(providerItem: Provider) {
       throw new Error("请先在上方点击「+ Add ChatGPT Account」登录账号，然后再获取模型列表。");
     }
     const acc = await codexAccountRepository.acquireAccount();
-    const endpoint = `${CODEX_BASE_URL}/codex/models?client_version=0.163.0`;
+    const endpoint = `${CODEX_BASE_URL}/models?client_version=0.163.0`;
     const headers: Record<string, string> = {
       Authorization: `Bearer ${acc.accessToken}`,
       originator: "codex_cli_rs",
       "User-Agent": "codex_cli_rs/0.144.5 (Windows; x64)",
+      "OpenAI-Beta": "responses=experimental",
       Accept: "application/json",
     };
     if (acc.chatgptAccountId) {
       headers["ChatGPT-Account-Id"] = acc.chatgptAccountId;
+      headers["chatgpt-account-id"] = acc.chatgptAccountId;
     }
     const res = await fetchWithTimeout(endpoint, { headers });
     if (!res.ok) {
@@ -399,15 +401,23 @@ function providerTestPayload(providerItem: Provider, mode: "non_stream" | "strea
     return { url: endpointFor(providerItem, baseUrlOverride), body };
   }
   if (providerItem.useResponseApi) {
+    const isCodex =
+      providerItem.id === "7ce7e322-b995-4b0c-9d48-42e08dcfcdda" ||
+      providerItem.name.toLowerCase() === "codex" ||
+      providerItem.oauth?.flow === "openai-codex" ||
+      providerItem.id === "98d0557b-0700-41e5-b1d6-ee875a53ae5a";
     const body: any = {
       model: selectedModel,
       input: [
-        { role: "system", content: "You are a helpful assistant" },
+        { role: isCodex ? "developer" : "system", content: "You are a helpful assistant" },
         { role: "user", content: mode === "tools" ? "Use the get_current_time tool." : "hello" },
       ],
-      stream: mode === "stream",
+      stream: isCodex ? true : mode === "stream",
       store: false,
     };
+    if (isCodex) {
+      body.include = ["reasoning.encrypted_content"];
+    }
     if (mode === "tools") {
       body.tools = [{ type: "function", name: "get_current_time", description: "Get the current date and time.", parameters: { type: "object", properties: {} } }];
       body.tool_choice = { type: "function", name: "get_current_time" };
@@ -520,20 +530,38 @@ export async function runProviderCheck(providerItem: Provider, mode: "non_stream
   const { url, body: rawBody } = providerTestPayload(providerItem, mode, selectedModel, resolved.baseUrl);
   const body = applyCustomBody(rawBody, assistant, modelItem);
   const credentialHeaders = resolved.headers;
+  const isCodex =
+    providerItem.id === "7ce7e322-b995-4b0c-9d48-42e08dcfcdda" ||
+    providerItem.name.toLowerCase() === "codex" ||
+    providerItem.oauth?.flow === "openai-codex" ||
+    providerItem.id === "98d0557b-0700-41e5-b1d6-ee875a53ae5a";
+  const isStreamRequest = Boolean(body.stream) || mode === "stream";
   const headers = applyRequestHeaders(
     {
       "Content-Type": "application/json",
-      ...(mode === "stream" ? { Accept: "text/event-stream" } : {}),
+      ...(isStreamRequest ? { Accept: "text/event-stream" } : {}),
       ...credentialHeaders,
     },
     assistant,
     providerItem,
     modelItem,
   );
+  if (isCodex) {
+    headers["OpenAI-Beta"] ??= "responses=experimental";
+    headers.originator ??= "rikkahub";
+    headers["User-Agent"] ??= "codex_cli_rs/0.144.5 (Windows; x64)";
+    if (resolved.accountId) {
+      headers["chatgpt-account-id"] ??= resolved.accountId;
+      headers["ChatGPT-Account-Id"] ??= resolved.accountId;
+    }
+  }
   // 订阅供应商整形与生成链路同一时机:body 定稿后。缺 chatgpt-account-id/OpenAI-Beta 头
   // 的探测请求会被 Codex 后端 400,测试连接对订阅供应商假红(§13.3 整形全路径覆盖)。
-  if (providerItem.authMode === "oauth" && providerItem.oauth) {
-    applyShaping(providerItem.oauth.flow, headers, body, providerItem.oauth.credential);
+  const flow = oauthFlowFor(providerItem);
+  const flowId = flow?.id ?? (isCodex ? "openai-codex" : undefined);
+  if (flowId) {
+    const cred = providerItem.oauth?.credential ?? (resolved.accountId ? { accountId: resolved.accountId } : undefined);
+    applyShaping(flowId, headers, body, cred);
   }
   let response: Response;
   try {
@@ -543,7 +571,7 @@ export async function runProviderCheck(providerItem: Provider, mode: "non_stream
       body: JSON.stringify(body),
       // 流式测试响应体可合法慢速产出(下游另有 120s 空闲超时),总时长给 300s 上限;
       // 非流式/工具测试 60s 足够。
-      timeoutMs: mode === "stream" ? 300_000 : 60_000,
+      timeoutMs: isStreamRequest ? 300_000 : 60_000,
     });
   } catch (err) {
     const detail = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
@@ -571,7 +599,7 @@ export async function runProviderCheck(providerItem: Provider, mode: "non_stream
   }
   let text = "";
   try {
-    text = mode === "stream" && response.ok ? await readProviderTestStream(response, providerItem) : await response.text();
+    text = isStreamRequest && response.ok ? await readProviderTestStream(response, providerItem) : await response.text();
   } catch (err) {
     const detail = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
     addLog({
@@ -617,7 +645,7 @@ export async function runProviderCheck(providerItem: Provider, mode: "non_stream
     ok: response.ok,
     status: response.status,
     endpoint: url,
-    preview: textBody(text || (mode === "stream" && response.ok ? "流式测试已收到事件" : "")),
+    preview: textBody(text || (isStreamRequest && response.ok ? "流式测试已收到事件" : "")),
   };
 }
 

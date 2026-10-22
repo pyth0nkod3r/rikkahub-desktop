@@ -10,6 +10,8 @@ import {
   codexAccountRepository,
 } from "./repository";
 import type { CodexAccount } from "./types";
+import { updateSettings } from "../../app-config";
+import { state } from "../../persistence/json-store";
 
 export interface CodexOAuthStatus {
   phase: "idle" | "waiting" | "success" | "error";
@@ -377,7 +379,40 @@ export class CodexOAuthManager {
       id_token?: string;
       expires_in?: number;
     };
-    return await codexAccountRepository.saveLogin(tokenJson);
+    const account = await codexAccountRepository.saveLogin(tokenJson);
+    try {
+      const codexProvider = state?.settings?.providers?.find(
+        (p) =>
+          p.id === "7ce7e322-b995-4b0c-9d48-42e08dcfcdda" ||
+          p.id === "98d0557b-0700-41e5-b1d6-ee875a53ae5a" ||
+          p.oauth?.flow === "openai-codex",
+      );
+      if (codexProvider && state?.settings) {
+        const providers = state.settings.providers.map((p) => {
+          if (p.id !== codexProvider.id) return p;
+          return {
+            ...p,
+            authMode: "oauth" as const,
+            enabled: true,
+            oauth: {
+              flow: "openai-codex" as const,
+              signedInAt: Date.now(),
+              credential: {
+                type: "oauth",
+                access: account.accessToken,
+                refresh: account.refreshToken,
+                expires: account.expiresAt,
+                accountId: account.chatgptAccountId || account.id,
+              },
+            },
+          };
+        });
+        updateSettings({ ...state.settings, providers });
+      }
+    } catch {
+      // non-blocking
+    }
+    return account;
   }
 
   private renderHtmlPage(success: boolean, message: string): string {

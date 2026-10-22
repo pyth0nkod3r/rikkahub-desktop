@@ -19,6 +19,7 @@ import type { Provider } from "../../foundation/types";
 import { reportError } from "../../observability/app-errors";
 import { state } from "../../persistence/json-store";
 import { OAUTH_FLOWS } from "./flows";
+import { codexAccountRepository } from "../codex-oauth/repository";
 
 export type Credential = OAuthCredential;
 
@@ -53,6 +54,14 @@ function enqueue<T>(providerId: string, run: () => Promise<T>): Promise<T> {
   return next;
 }
 
+function isCodexProviderId(providerId: string): boolean {
+  return (
+    providerId === "openai-codex" ||
+    providerId === "7ce7e322-b995-4b0c-9d48-42e08dcfcdda" ||
+    providerId === "98d0557b-0700-41e5-b1d6-ee875a53ae5a"
+  );
+}
+
 function findProvider(providerId: string): Provider | undefined {
   // state 可能未初始化(pi 引擎测试 / 纯工具调用场景)——安全回落 undefined。
   const providers = state?.settings?.providers;
@@ -68,15 +77,35 @@ function findProvider(providerId: string): Provider | undefined {
 
 function readCredential(providerId: string): Credential | undefined {
   const provider = findProvider(providerId);
-  if (!provider?.oauth) return undefined;
-  return provider.oauth.credential as unknown as Credential;
+  if (provider?.oauth) return provider.oauth.credential as unknown as Credential;
+  if (isCodexProviderId(providerId)) {
+    const acc =
+      codexAccountRepository.listAccounts().find((a) => a.enabled && a.tokenStatus !== "INVALID") ??
+      codexAccountRepository.listAccounts().find((a) => a.enabled);
+    if (acc) {
+      return {
+        type: "oauth",
+        access: acc.accessToken,
+        refresh: acc.refreshToken,
+        expires: acc.expiresAt,
+        accountId: acc.chatgptAccountId || acc.id,
+      };
+    }
+  }
+  return undefined;
 }
 
 /** CAS 落盘:mutate 期间 provider 行可能已被别处改写(登录/注销/POST 保存),refresh
  *  指纹相验——若行内 refresh 已不是我们 mutate 时的起点,说明有并发写赢了,本次写丢弃。
  *  返回是否真正落盘。锁定行用 findProvider 解析出的宿主 id,与传入的 pi id 解耦。 */
 function commitCredential(providerId: string, expectRefresh: string | undefined, next: Credential | undefined): boolean {
-  const target = findProvider(providerId);
+  const target =
+    findProvider(providerId) ??
+    (isCodexProviderId(providerId)
+      ? state?.settings?.providers?.find(
+          (p) => isCodexProviderId(p.id) || p.oauth?.flow === "openai-codex",
+        )
+      : undefined);
   if (!target) return false;
   const currentRefresh = target.oauth?.credential?.refresh;
   if (currentRefresh !== expectRefresh) return false;
@@ -107,25 +136,48 @@ function commitCredential(providerId: string, expectRefresh: string | undefined,
 }
 
 export function createPiCredentialStore(): CredentialStore {
-  return {
+  const store: CredentialStore = {
     async read(providerId, options) {
       options?.signal?.throwIfAborted();
+      if (isCodexProviderId(providerId)) {
+        try {
+          if (codexAccountRepository.listAccounts().length > 0) {
+            const acc = await codexAccountRepository.acquireAccount();
+            return {
+              type: "oauth",
+              access: acc.accessToken,
+              refresh: acc.refreshToken,
+              expires: acc.expiresAt,
+              accountId: acc.chatgptAccountId || acc.id,
+            };
+          }
+        } catch {
+          // fall back to synchronous read
+        }
+      }
       return readCredential(providerId);
     },
 
     async list() {
       // pi 消费方(ModelRuntime storedProviders / getProviderAuthStatus)以 pi 内置 id 为键,
       // 与 read/modify 的键口径一致——报宿主 UUID 会让 pi 认为「有凭证但不知道是谁的」。
-      return (state?.settings?.providers ?? [])
+      const list = (state?.settings?.providers ?? [])
         .filter((p) => p.oauth != null)
         .map((p) => ({ providerId: OAUTH_FLOWS[p.oauth!.flow]?.piProviderId ?? p.id, type: "oauth" as const }));
+      if (
+        codexAccountRepository.listAccounts().length > 0 &&
+        !list.some((item) => item.providerId === "openai-codex")
+      ) {
+        list.push({ providerId: "openai-codex", type: "oauth" });
+      }
+      return list;
     },
 
     async modify(providerId, fn, options) {
       options?.signal?.throwIfAborted();
       return enqueue(providerId, async () => {
         options?.signal?.throwIfAborted();
-        const before = readCredential(providerId);
+        const before = await store.read(providerId);
         const expectRefresh = before?.refresh;
         let next: Credential | undefined;
         try {
@@ -135,11 +187,24 @@ export function createPiCredentialStore(): CredentialStore {
           throw error;
         }
         // 回调返回 undefined = 不改动(另一次请求已刷新/已注销),直接返回当前。
-        if (next === undefined) return readCredential(providerId);
+        if (next === undefined) return store.read(providerId);
+        if (isCodexProviderId(providerId) && next) {
+          const accounts = codexAccountRepository.listAccounts();
+          const target = accounts.find((a) => a.refreshToken === expectRefresh) || accounts[0];
+          if (target) {
+            codexAccountRepository.updateAccount({
+              ...target,
+              accessToken: next.access,
+              refreshToken: next.refresh,
+              expiresAt: next.expires,
+              tokenStatus: "AVAILABLE",
+            });
+          }
+        }
         const ok = commitCredential(providerId, expectRefresh, next);
         if (!ok) {
           // CAS 失败:行已被并发写改写。返回当前实际凭证,让调用方基于新事实再决策。
-          return readCredential(providerId);
+          return store.read(providerId);
         }
         return next;
       });
@@ -148,8 +213,15 @@ export function createPiCredentialStore(): CredentialStore {
     async delete(providerId, options) {
       options?.signal?.throwIfAborted();
       return enqueue(providerId, async () => {
-        commitCredential(providerId, readCredential(providerId)?.refresh, undefined);
+        if (isCodexProviderId(providerId)) {
+          const accounts = codexAccountRepository.listAccounts();
+          for (const acc of accounts) {
+            codexAccountRepository.deleteAccount(acc.id);
+          }
+        }
+        commitCredential(providerId, (await store.read(providerId))?.refresh, undefined);
       });
     },
   };
+  return store;
 }

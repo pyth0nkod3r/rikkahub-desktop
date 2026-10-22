@@ -60,14 +60,16 @@ export async function resolveProviderAuthForProvider(
       Authorization: `Bearer ${acc.accessToken}`,
       originator: "codex_cli_rs",
       "User-Agent": "codex_cli_rs/0.144.5 (Windows; x64)",
+      "OpenAI-Beta": "responses=experimental",
     };
     if (acc.chatgptAccountId) {
       headers["ChatGPT-Account-Id"] = acc.chatgptAccountId;
+      headers["chatgpt-account-id"] = acc.chatgptAccountId;
     }
     return {
       headers,
       baseUrl: CODEX_BASE_URL,
-      accountId: acc.id,
+      accountId: acc.chatgptAccountId || acc.id,
     };
   }
 

@@ -11,6 +11,7 @@ import { setState, state } from "../../persistence/json-store";
 import { updateSettings } from "../../app-config";
 import { defaultSettings } from "../../app-config/defaults";
 import type { Provider } from "../../foundation/types";
+import { codexAccountRepository } from "../codex-oauth/repository";
 
 function seedProvider(id: string, refresh: string): void {
   const provider: Provider = {
@@ -131,5 +132,42 @@ describe("pi credential store", () => {
     expect(currentRefresh(HOST_UUID)).toBe("r-new");
     // 再以 pi id 读,应读到回写后的新凭证。
     expect((await store.read("openai-codex"))?.refresh).toBe("r-new");
+  });
+
+  test("codexAccountRepository 桥接: state 中无 provider.oauth 时从 codexAccountRepository 读取与列出凭证", async () => {
+    setState({ ...state, settings: { ...state.settings, providers: [] } } as any);
+    const origList = codexAccountRepository.listAccounts.bind(codexAccountRepository);
+    const origAcquire = codexAccountRepository.acquireAccount.bind(codexAccountRepository);
+    try {
+      codexAccountRepository.listAccounts = () => [
+        {
+          id: "codex-1",
+          email: "user@example.com",
+          name: "User",
+          userId: "u-1",
+          chatgptAccountId: "acct-test",
+          accessToken: "codex-access-xyz",
+          refreshToken: "codex-refresh-xyz",
+          expiresAt: Date.now() + 3600_000,
+          tokenStatus: "AVAILABLE",
+          enabled: true,
+          usage: null,
+        },
+      ];
+      codexAccountRepository.acquireAccount = async () => codexAccountRepository.listAccounts()[0]!;
+
+      const store = createPiCredentialStore();
+      const list = await store.list();
+      expect(list.some((item) => item.providerId === "openai-codex")).toBe(true);
+
+      const cred = await store.read("openai-codex");
+      expect(cred).not.toBeUndefined();
+      expect(cred?.access).toBe("codex-access-xyz");
+      expect(cred?.refresh).toBe("codex-refresh-xyz");
+      expect(cred?.accountId).toBe("acct-test");
+    } finally {
+      codexAccountRepository.listAccounts = origList;
+      codexAccountRepository.acquireAccount = origAcquire;
+    }
   });
 });
