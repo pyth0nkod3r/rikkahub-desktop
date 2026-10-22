@@ -135,15 +135,6 @@ export const DEFAULT_CODEX_PROVIDER_ID = "7ce7e322-b995-4b0c-9d48-42e08dcfcdda";
 export const DEFAULT_GEMINI_OAUTH_PROVIDER_ID = "2b6c1f84-73ad-4e35-b0c7-1a9e4d5f8c21";
 
 export const SUNSET_PROVIDER_IDS = new Set<string>();
-const _OBSOLETE_SUNSET_IDS = new Set<string>([
-  "1b1395ed-b702-4aeb-8bc1-b681c4456953", // AiHubMix
-  "da020a90-f7b3-4c29-b90e-c511a0630630", // 小马算力
-  "da93779f-3956-48cc-82ef-67bb482eaaf7", // 302.AI
-  "53027b08-1b58-43d5-90ed-29173203e3d8", // AckAI
-  "4da09554-8844-4cc8-a4a9-fe1b2515e91b", // UnifyLLM
-  "a8d2d463-e8c0-41f2-b89e-f5eb8e716cce", // RikkaHub(内置模型,服务停维护下架;配过 key 的保留)
-  "56a94d29-c88b-41c5-8e09-38a7612d6cf8", // 硅基流动(2026-09-26 精简预置清单下架;配过 key 的保留)
-]);
 
 // 1.1.1 供应商迁移用的固定 id。改名/补模型走 id 匹配,确保老用户 state 也生效。
 export const TENCENT_PROVIDER_ID = "ef5d149b-8e34-404b-818c-6ec242e5c3c5";

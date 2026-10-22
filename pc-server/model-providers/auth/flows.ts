@@ -87,6 +87,7 @@ export const OAUTH_FLOWS: Record<OAuthFlowId, OAuthFlowMeta> = {
 export function oauthFlowFor(provider: Pick<Provider, "id" | "oauth">): OAuthFlowMeta | undefined {
   const byRow = provider.oauth?.flow ? OAUTH_FLOWS[provider.oauth.flow] : undefined;
   if (byRow) return byRow;
+  if (provider.id === "7ce7e322-b995-4b0c-9d48-42e08dcfcdda") return OAUTH_FLOWS["openai-codex"];
   return Object.values(OAUTH_FLOWS).find((flow) => flow.presetProviderId === provider.id);
 }
 

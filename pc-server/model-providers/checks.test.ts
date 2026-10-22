@@ -5,6 +5,8 @@ import { describe, expect, it } from "bun:test";
 import { upstreamHttpError } from "../inference-engine/providers";
 import { endpointFor, fetchProviderModels } from "./checks";
 import { modelsEndpointFor, provider, providerHeaders } from "./index";
+import { codexAccountRepository } from "./codex-oauth/repository";
+import { geminiAccountRepository } from "./gemini-oauth/repository";
 
 function make(input: Parameters<typeof provider>[0]) {
   return provider({ apiKey: "sk-test", ...input });
@@ -35,6 +37,127 @@ describe("fetchProviderModels:订阅供应商走随包目录,不打上游 /model
       expect(result.models.find((m) => m.modelId === "k3")?.id).toBe("keep-k3");
     } finally {
       globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("Codex: 未登录时返回随包预置目录，零网络", async () => {
+    const originalFetch = globalThis.fetch;
+    let networkCalls = 0;
+    globalThis.fetch = (async () => {
+      networkCalls += 1;
+      throw new Error("network must not be touched");
+    }) as unknown as typeof fetch;
+    try {
+      const codex = make({
+        id: "7ce7e322-b995-4b0c-9d48-42e08dcfcdda",
+        name: "Codex",
+        baseUrl: "https://chatgpt.com/backend-api",
+        type: "openai",
+        apiKey: "",
+        authMode: "oauth",
+      });
+      const result = await fetchProviderModels(codex);
+      expect(result.endpoint).toContain("bundled-catalog");
+      expect(result.models.length).toBeGreaterThan(0);
+      expect(result.models.some((m) => m.modelId.includes("gpt-5"))).toBe(true);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("Codex: 已登录时动态调用上游 /models 接口拉取最新模型", async () => {
+    const originalFetch = globalThis.fetch;
+    const origList = codexAccountRepository.listAccounts.bind(codexAccountRepository);
+    const origAcquire = codexAccountRepository.acquireAccount.bind(codexAccountRepository);
+
+    let calledUrl = "";
+    globalThis.fetch = (async (url: any) => {
+      calledUrl = String(url);
+      return new Response(
+        JSON.stringify({
+          models: [
+            { slug: "gpt-5.6-luna", display_name: "ChatGPT 5.6 Luna", visibility: "list", supported_reasoning_levels: ["high"] },
+            { slug: "gpt-5.6", display_name: "ChatGPT 5.6", visibility: "list" },
+            { slug: "hidden-internal", display_name: "Hidden", visibility: "internal" },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }) as unknown as typeof fetch;
+
+    codexAccountRepository.listAccounts = () => [
+      { id: "acc-1", name: "User", email: "user@example.com", accessToken: "tok-123", refreshToken: "ref", expiresAt: Date.now() + 100000, enabled: true, tokenStatus: "AVAILABLE" } as any,
+    ];
+    codexAccountRepository.acquireAccount = async () => ({
+      id: "acc-1", name: "User", email: "user@example.com", accessToken: "tok-123", refreshToken: "ref", expiresAt: Date.now() + 100000, enabled: true, tokenStatus: "AVAILABLE"
+    } as any);
+
+    try {
+      const codex = make({
+        id: "7ce7e322-b995-4b0c-9d48-42e08dcfcdda",
+        name: "Codex",
+        baseUrl: "https://chatgpt.com/backend-api",
+        type: "openai",
+        apiKey: "",
+        authMode: "oauth",
+      });
+      const result = await fetchProviderModels(codex);
+      expect(calledUrl).toContain("chatgpt.com/backend-api/codex/models");
+      expect(result.models.some((m) => m.modelId === "gpt-5.6-luna")).toBe(true);
+      expect(result.models.some((m) => m.modelId === "hidden-internal")).toBe(false);
+    } finally {
+      globalThis.fetch = originalFetch;
+      codexAccountRepository.listAccounts = origList;
+      codexAccountRepository.acquireAccount = origAcquire;
+    }
+  });
+
+  it("Gemini OAuth: 已登录时动态调用上游 fetchAvailableModels 接口拉取最新模型", async () => {
+    const originalFetch = globalThis.fetch;
+    const origList = geminiAccountRepository.listAccounts.bind(geminiAccountRepository);
+    const origAcquire = geminiAccountRepository.acquireAccount.bind(geminiAccountRepository);
+
+    let calledUrl = "";
+    globalThis.fetch = (async (url: any) => {
+      calledUrl = String(url);
+      return new Response(
+        JSON.stringify({
+          models: {
+            "gemini-2.5-pro": { displayName: "Gemini 2.5 Pro", supportsImages: true, supportsThinking: true },
+            "gemini-2.5-flash": { displayName: "Gemini 2.5 Flash", supportsImages: true },
+            "gemini-3.1-pro-high": { displayName: "Gemini 3.1 Pro High" },
+            "internal-model": { displayName: "Internal", isInternal: true },
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }) as unknown as typeof fetch;
+
+    geminiAccountRepository.listAccounts = () => [
+      { id: "g-1", name: "User", email: "user@gmail.com", accessToken: "tok-g", refreshToken: "ref", expiresAt: Date.now() + 100000, enabled: true, tokenStatus: "AVAILABLE" } as any,
+    ];
+    geminiAccountRepository.acquireAccount = async () => ({
+      id: "g-1", name: "User", email: "user@gmail.com", accessToken: "tok-g", refreshToken: "ref", expiresAt: Date.now() + 100000, enabled: true, tokenStatus: "AVAILABLE"
+    } as any);
+
+    try {
+      const gemini = make({
+        id: "2b6c1f84-73ad-4e35-b0c7-1a9e4d5f8c21",
+        name: "Gemini (OAuth)",
+        baseUrl: "https://cloudaicompanion.googleapis.com",
+        type: "google",
+        apiKey: "",
+        authMode: "oauth",
+      });
+      const result = await fetchProviderModels(gemini);
+      expect(calledUrl).toContain("cloudaicompanion.googleapis.com/v1internal:fetchAvailableModels");
+      expect(result.models.some((m) => m.modelId === "gemini-2.5-pro")).toBe(true);
+      expect(result.models.some((m) => m.modelId === "gemini-3.1-pro-high")).toBe(false);
+      expect(result.models.some((m) => m.modelId === "internal-model")).toBe(false);
+    } finally {
+      globalThis.fetch = originalFetch;
+      geminiAccountRepository.listAccounts = origList;
+      geminiAccountRepository.acquireAccount = origAcquire;
     }
   });
 });

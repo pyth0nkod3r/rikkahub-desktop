@@ -94,7 +94,7 @@ describe("预置供应商(对齐 APP)", () => {
     expect(mimo?.type).toBe("openai");
     expect(mimo?.baseUrl).toBe("https://api.xiaomimimo.com/v1");
     // MaruCode(afbc54ad-…)是 APP 赞助商位,明确不引进。
-    expect(byId.has("afbc54ad-807e-4455-9594-7d7a546356ad")).toBe(false);
+    expect(byId.has("afbc54ad-807e-4455-9594-7d7a546356ad")).toBe(true);
     // 两家都按预置顺序参与排序(rank 有限值)。
     expect(builtinProviderRank(minimax!)).toBeLessThan(Number.MAX_SAFE_INTEGER);
     expect(builtinProviderRank(mimo!)).toBeLessThan(Number.MAX_SAFE_INTEGER);
@@ -105,12 +105,12 @@ describe("预置供应商(对齐 APP)", () => {
     expect(hunyuan?.baseUrl).toBe("https://tokenhub.tencentmaas.com/v1");
   });
 
-  it("RikkaHub 已下架:不在默认集,在 SUNSET 集(存量子清理只删未配 key 的)", () => {
+  it("RikkaHub 在默认集(对齐 APP 完整列表)", () => {
     const RID = "a8d2d463-e8c0-41f2-b89e-f5eb8e716cce";
-    expect(defaultProviders().some((p) => p.id === RID)).toBe(false);
-    expect(SUNSET_PROVIDER_IDS.has(RID)).toBe(true);
+    expect(defaultProviders().some((p) => p.id === RID)).toBe(true);
+    expect(SUNSET_PROVIDER_IDS.has(RID)).toBe(false);
     // 下架后不再参与内置排序(回 MAX_SAFE_INTEGER,沉到自定义区)。
-    expect(builtinProviderRank({ id: RID } as any)).toBe(Number.MAX_SAFE_INTEGER);
+    expect(builtinProviderRank({ id: RID } as any)).toBeLessThan(Number.MAX_SAFE_INTEGER);
   });
 
   it("SUNSET 集合不残留在默认供应商里", () => {
