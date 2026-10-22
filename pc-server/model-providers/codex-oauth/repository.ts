@@ -6,7 +6,8 @@ import { join } from "node:path";
 import { dataDir } from "../../foundation/paths";
 import type { CodexAccount, CodexAccountState, CodexUsageSnapshot } from "./types";
 
-export const CODEX_CLIENT_ID = "app-p98c627e776e";
+export const CODEX_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
+export const CODEX_AUTHORIZE_URL = "https://auth.openai.com/oauth/authorize";
 export const CODEX_TOKEN_URL = "https://auth.openai.com/oauth/token";
 export const CODEX_BASE_URL = "https://chatgpt.com/backend-api";
 

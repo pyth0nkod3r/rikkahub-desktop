@@ -244,14 +244,14 @@ export function defaultProviders(): Provider[] {
       baseUrl: "https://api.rikka-ai.com/v1",
       shortDescription: "RikkaHub 官方聚合 API",
       description: "RikkaHub 官方聚合 API，提供高并发和稳定服务",
-      models: [model("auto", "Auto")],
+
     }),
     provider({
       id: "1eeea727-9ee5-4cae-93e6-6fb01a4d051e",
       name: "OpenAI",
       baseUrl: "https://api.openai.com/v1",
       shortDescription: "OpenAI 官方 API",
-      models: [model("gpt-4.1"), model("gpt-4.1-mini"), model("gpt-4o-mini")],
+
 
     }),
     provider({
@@ -261,15 +261,6 @@ export function defaultProviders(): Provider[] {
       shortDescription: "OpenAI Codex 专有接口 (支持多账号轮询与配额查询)",
       authMode: "oauth",
       useResponseApi: true,
-      models: [
-        model("gpt-5.6-luna", "GPT-5.6 Luna"),
-        model("gpt-5.6", "GPT-5.6"),
-        model("gpt-5.5", "GPT-5.5"),
-        model("gpt-5.4", "GPT-5.4"),
-        model("gpt-5.3", "GPT-5.3"),
-        model("gpt-5.2", "GPT-5.2"),
-        model("gpt-5.1", "GPT-5.1"),
-      ],
 
     }),
     // 订阅制供应商(authMode:"oauth"),紧跟同家 API 预置(用户拍板 2026-09-25:各家贴近各家)。
@@ -290,7 +281,7 @@ export function defaultProviders(): Provider[] {
       shortDescription: "Anthropic Claude 原生 API",
       // 2026-10 对齐当前代(官方已将 4.x 归 legacy;5.5 与 4.8 同价降档)。老用户 state 的
       // models 由 mergeById 保留,不受影响。
-      models: [model("claude-opus-5-5"), model("claude-sonnet-5-5"), model("claude-haiku-4-5-20251001")],
+
     }),
     // Claude 订阅紧跟「Anthropic」(同家)。仅工作区可用(chatCapable:false,方案 §6 决策②):
     // 凭证要求 Claude Code 全套伪装(pi 内建),宿主聊天引擎不接(resolve 处闸门),模型也
@@ -310,7 +301,7 @@ export function defaultProviders(): Provider[] {
       baseUrl: "https://generativelanguage.googleapis.com/v1beta",
       enabled: true,
       shortDescription: "谷歌官方 Gemini API",
-      models: [model("gemini-2.5-flash"), model("gemini-2.5-pro")],
+
     }),
     provider({
       id: "google-gemini-oauth",
@@ -320,10 +311,6 @@ export function defaultProviders(): Provider[] {
       enabled: false,
       shortDescription: "使用 Google 账号 OAuth 登录 (支持多账号轮询与配额查询)",
       authMode: "oauth",
-      models: [
-        model("gemini-2.5-flash", "Gemini 2.5 Flash"),
-        model("gemini-2.5-pro", "Gemini 2.5 Pro"),
-      ],
     }),
     provider({ id: "ff3cde7e-0f65-43d7-8fb2-6475c99f5990", name: "xAI", baseUrl: "https://api.x.ai/v1", useResponseApi: true }),
     // Grok 订阅紧跟「xAI」(同家)。pi 口径:api.x.ai/v1 responses(scope 含 api:access)。
@@ -342,12 +329,6 @@ export function defaultProviders(): Provider[] {
       shortDescription: "钠 API 提供 ChatGPT、Claude、Gemini 等 100+ 全球顶级模型接口",
       description: "钠 API 提供 ChatGPT、Claude、Gemini 等 100+ 全球顶级模型接口,Focusing on competitive pricing and superior stability.",
       balanceOption: { enabled: true, apiPath: "/credits", resultPath: "data.total_credits" },
-      models: [
-        model("claude-opus-4-6"),
-        model("gpt-5.5"),
-        model("deepseek-ai/DeepSeek-V4-Flash"),
-        model("deepseek-ai/DeepSeek-V4-Pro"),
-      ],
     }),
     provider({
       id: "f099ad5b-ef03-446d-8e78-7e36787f780b",

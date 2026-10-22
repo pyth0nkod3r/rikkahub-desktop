@@ -3,6 +3,7 @@ import { error, json, readJson } from "../request";
 import { geminiAccountRepository } from "../../model-providers/gemini-oauth/repository";
 import { geminiOAuthManager } from "../../model-providers/gemini-oauth/manager";
 import { codexAccountRepository } from "../../model-providers/codex-oauth/repository";
+import { codexOAuthManager } from "../../model-providers/codex-oauth/manager";
 
 export async function handleProviderAccountRoutes(
   request: Request,
@@ -32,6 +33,14 @@ export async function handleProviderAccountRoutes(
         return error(err instanceof Error ? err.message : "Failed to start Gemini login", 500);
       }
     }
+    if (type === "chatgpt" || type === "codex") {
+      try {
+        const { authUrl } = await codexOAuthManager.startLogin();
+        return json({ authUrl });
+      } catch (err) {
+        return error(err instanceof Error ? err.message : "Failed to start Codex login", 500);
+      }
+    }
     return error("Unsupported provider type for interactive login", 400);
   }
 
@@ -40,6 +49,9 @@ export async function handleProviderAccountRoutes(
     if (type === "gemini") {
       return json({ status: geminiOAuthManager.getStatus() });
     }
+    if (type === "chatgpt" || type === "codex") {
+      return json({ status: codexOAuthManager.getStatus() });
+    }
     return json({ status: { phase: "idle" } });
   }
 
@@ -47,6 +59,10 @@ export async function handleProviderAccountRoutes(
   if (path === "settings/providers/accounts/cancel" && request.method === "POST") {
     if (type === "gemini") {
       geminiOAuthManager.cancelLogin();
+      return json({ ok: true });
+    }
+    if (type === "chatgpt" || type === "codex") {
+      codexOAuthManager.cancelLogin();
       return json({ ok: true });
     }
     return json({ ok: true });

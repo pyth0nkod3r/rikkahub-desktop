@@ -14,7 +14,7 @@ import { hostOfProvider } from "../inference-engine/message-builder";
 import { deltaReasoningContent, deltaTextContent, modelsDevCache, parseSseChunks, responseEventToDelta, upstreamHttpError } from "../inference-engine/providers";
 import { internalOutputCap } from "./model-limits";
 import { isUnclaimedDisplayName, officialDisplayNameFor } from "./display-names";
-import { geminiAccountRepository, antigravityHeaders, GEMINI_CODE_ASSIST_ENDPOINT } from "./gemini-oauth/repository";
+import { geminiAccountRepository, antigravityHeaders } from "./gemini-oauth/repository";
 import { codexAccountRepository, CODEX_BASE_URL } from "./codex-oauth/repository";
 
 /** 连通性测试的输出预算(我们的探测,不是用户的选择;经 internalOutputCap 收进模型上限)。 */
@@ -71,17 +71,26 @@ export async function fetchProviderModels(providerItem: Provider) {
   // 订阅供应商:模型目录随包(pi 内建目录),不打上游 /models——Codex 后端与 Kimi coding
   // 端点都没有可用的模型列表接口,打了只会 401/404 让「获取模型列表」和「测试连接」
   // 在第一步就失败。既有 id 按 modelId 保留,刷新目录不换 id。
-  // 1. Google Gemini OAuth: 已登录账号优先打上游 fetchAvailableModels; 未登录/异常时回落随包目录
+  // 1. Google Gemini OAuth: 已登录账号打上游 fetchAvailableModels 动态拉取模型列表
   if (
     providerItem.id === "google-gemini-oauth" ||
     providerItem.id === "2b6c1f84-73ad-4e35-b0c7-1a9e4d5f8c21" ||
     providerItem.name.toLowerCase().includes("gemini oauth") ||
     providerItem.oauth?.flow === ("gemini-oauth" as any)
   ) {
-    if (geminiAccountRepository.listAccounts().length > 0) {
+    if (geminiAccountRepository.listAccounts().length === 0) {
+      throw new Error("请先在上方点击「+ Add Google / Gemini Account」登录账号，然后再获取模型列表。");
+    }
+    const acc = await geminiAccountRepository.acquireAccount();
+    const endpoints = [
+      "https://daily-cloudcode-pa.googleapis.com",
+      "https://daily-cloudcode-pa.sandbox.googleapis.com",
+      "https://cloudaicompanion.googleapis.com",
+    ];
+    let lastError: Error | null = null;
+    for (const ep of endpoints) {
       try {
-        const acc = await geminiAccountRepository.acquireAccount();
-        const endpoint = `${GEMINI_CODE_ASSIST_ENDPOINT}/v1internal:fetchAvailableModels`;
+        const endpoint = `${ep}/v1internal:fetchAvailableModels`;
         const res = await fetchWithTimeout(endpoint, {
           method: "POST",
           headers: antigravityHeaders(acc.accessToken),
@@ -94,6 +103,7 @@ export async function fetchProviderModels(providerItem: Provider) {
           for (const [modelId, details] of Object.entries<any>(modelsObj)) {
             if (details?.isInternal) continue;
             if (modelId === "gemini-3.1-pro-high") continue;
+            if (modelId.startsWith("chat_") || modelId.startsWith("tab_")) continue;
             const existing = providerItem.models?.find((m) => m.modelId === modelId);
             const supportsImages = details?.supportsImages === true;
             const supportsThinking = details?.supportsThinking === true && !modelId.toLowerCase().includes("gpt-oss");
@@ -116,67 +126,68 @@ export async function fetchProviderModels(providerItem: Provider) {
             };
           }
         }
-      } catch {
-        // 回落随包目录
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
       }
     }
+    throw lastError || new Error("获取 Gemini 模型列表失败：请求上游接口未能成功。");
   }
 
-  // 2. ChatGPT (Codex) OAuth: 已登录账号优先打上游 /models 接口; 未登录/异常时回落随包目录
+  // 2. ChatGPT (Codex) OAuth: 已登录账号打上游 /models 接口动态拉取模型列表
   if (
     providerItem.id === "7ce7e322-b995-4b0c-9d48-42e08dcfcdda" ||
     providerItem.name.toLowerCase() === "codex" ||
     providerItem.oauth?.flow === "openai-codex"
   ) {
-    if (codexAccountRepository.listAccounts().length > 0) {
-      try {
-        const acc = await codexAccountRepository.acquireAccount();
-        const endpoint = `${CODEX_BASE_URL}/codex/models?client_version=0.163.0`;
-        const headers: Record<string, string> = {
-          Authorization: `Bearer ${acc.accessToken}`,
-          originator: "codex_cli_rs",
-          "User-Agent": "codex_cli_rs/0.144.5 (Windows; x64)",
-          Accept: "application/json",
-        };
-        if (acc.chatgptAccountId) {
-          headers["ChatGPT-Account-Id"] = acc.chatgptAccountId;
-        }
-        const res = await fetchWithTimeout(endpoint, { headers });
-        if (res.ok) {
-          const raw = (await res.json()) as Record<string, any>;
-          const rawList = Array.isArray(raw?.models) ? raw.models : [];
-          const visible = rawList.filter((m: any) => m.visibility === "list").length > 0
-            ? rawList.filter((m: any) => m.visibility === "list")
-            : rawList;
-          const models: Model[] = [];
-          for (const m of visible) {
-            const slug = String(m.slug || m.id || "").trim();
-            if (!slug) continue;
-            const existing = providerItem.models?.find((mod) => mod.modelId === slug);
-            const reasoning = Array.isArray(m.supported_reasoning_levels) && m.supported_reasoning_levels.length > 0;
-            models.push({
-              id: existing?.id || crypto.randomUUID(),
-              modelId: slug,
-              displayName: m.display_name || slug,
-              type: "CHAT",
-              inputModalities: ["TEXT", "IMAGE"],
-              outputModalities: ["TEXT"],
-              abilities: reasoning ? ["TOOL", "REASONING"] : ["TOOL"],
-              tools: [],
-            });
-          }
-          if (models.length > 0) {
-            return {
-              endpoint,
-              models: applyOfficialDisplayNames(providerItem, models),
-              preview: JSON.stringify(raw, null, 2),
-            };
-          }
-        }
-      } catch {
-        // 回落随包目录
-      }
+    if (codexAccountRepository.listAccounts().length === 0) {
+      throw new Error("请先在上方点击「+ Add ChatGPT Account」登录账号，然后再获取模型列表。");
     }
+    const acc = await codexAccountRepository.acquireAccount();
+    const endpoint = `${CODEX_BASE_URL}/codex/models?client_version=0.163.0`;
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${acc.accessToken}`,
+      originator: "codex_cli_rs",
+      "User-Agent": "codex_cli_rs/0.144.5 (Windows; x64)",
+      Accept: "application/json",
+    };
+    if (acc.chatgptAccountId) {
+      headers["ChatGPT-Account-Id"] = acc.chatgptAccountId;
+    }
+    const res = await fetchWithTimeout(endpoint, { headers });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`获取 Codex 模型列表失败 (${res.status}): ${text}`);
+    }
+    const raw = (await res.json()) as Record<string, any>;
+    const rawList = Array.isArray(raw?.models) ? raw.models : [];
+    const visible = rawList.filter((m) => m.visibility === "list").length > 0
+      ? rawList.filter((m) => m.visibility === "list")
+      : rawList;
+    const models: Model[] = [];
+    for (const m of visible) {
+      const slug = String(m.slug || m.id || "").trim();
+      if (!slug) continue;
+      const existing = providerItem.models?.find((mod) => mod.modelId === slug);
+      const reasoning = Array.isArray(m.supported_reasoning_levels) && m.supported_reasoning_levels.length > 0;
+      models.push({
+        id: existing?.id || crypto.randomUUID(),
+        modelId: slug,
+        displayName: m.display_name || slug,
+        type: "CHAT",
+        inputModalities: ["TEXT", "IMAGE"],
+        outputModalities: ["TEXT"],
+        abilities: reasoning ? ["TOOL", "REASONING"] : ["TOOL"],
+        tools: [],
+      });
+    }
+    if (models.length > 0) {
+      return {
+        endpoint,
+        models: applyOfficialDisplayNames(providerItem, models),
+        preview: JSON.stringify(raw, null, 2),
+      };
+    }
+    throw new Error("Codex 上游未返回任何可用模型。");
   }
 
   if (isOAuthProvider(providerItem)) {

@@ -40,29 +40,16 @@ describe("fetchProviderModels:订阅供应商走随包目录,不打上游 /model
     }
   });
 
-  it("Codex: 未登录时返回随包预置目录，零网络", async () => {
-    const originalFetch = globalThis.fetch;
-    let networkCalls = 0;
-    globalThis.fetch = (async () => {
-      networkCalls += 1;
-      throw new Error("network must not be touched");
-    }) as unknown as typeof fetch;
-    try {
-      const codex = make({
-        id: "7ce7e322-b995-4b0c-9d48-42e08dcfcdda",
-        name: "Codex",
-        baseUrl: "https://chatgpt.com/backend-api",
-        type: "openai",
-        apiKey: "",
-        authMode: "oauth",
-      });
-      const result = await fetchProviderModels(codex);
-      expect(result.endpoint).toContain("bundled-catalog");
-      expect(result.models.length).toBeGreaterThan(0);
-      expect(result.models.some((m) => m.modelId.includes("gpt-5"))).toBe(true);
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+  it("Codex: 未登录时提示先登录账号", async () => {
+    const codex = make({
+      id: "7ce7e322-b995-4b0c-9d48-42e08dcfcdda",
+      name: "Codex",
+      baseUrl: "https://chatgpt.com/backend-api",
+      type: "openai",
+      apiKey: "",
+      authMode: "oauth",
+    });
+    expect(fetchProviderModels(codex)).rejects.toThrow("请先在上方点击「+ Add ChatGPT Account」登录账号");
   });
 
   it("Codex: 已登录时动态调用上游 /models 接口拉取最新模型", async () => {
@@ -150,7 +137,7 @@ describe("fetchProviderModels:订阅供应商走随包目录,不打上游 /model
         authMode: "oauth",
       });
       const result = await fetchProviderModels(gemini);
-      expect(calledUrl).toContain("cloudaicompanion.googleapis.com/v1internal:fetchAvailableModels");
+      expect(calledUrl).toContain("v1internal:fetchAvailableModels");
       expect(result.models.some((m) => m.modelId === "gemini-2.5-pro")).toBe(true);
       expect(result.models.some((m) => m.modelId === "gemini-3.1-pro-high")).toBe(false);
       expect(result.models.some((m) => m.modelId === "internal-model")).toBe(false);

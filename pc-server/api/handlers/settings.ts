@@ -1061,7 +1061,7 @@ ${outcome.serverName ? `<p>${esc(outcome.serverName)}</p>` : ""}
     void loadModelsDev(true).then(() => backfillModelDisplayNames(modelsDevCache));
     try {
       const result = await fetchProviderModels(providerItem);
-      if (body.save) {
+      if (body.save !== false) {
         updateSettings({
           ...state.settings,
           providers: state.settings.providers.map((item) =>

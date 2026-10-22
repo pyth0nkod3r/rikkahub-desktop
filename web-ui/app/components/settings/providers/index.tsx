@@ -184,9 +184,12 @@ export function ProvidersSection({
       await api.post("settings/provider", draft);
       const result = await api.post<{ endpoint: string; models: ProviderModel[] }>(
         "settings/provider/models",
-        { providerId: draft.id },
+        { providerId: draft.id, save: true },
       );
+
+      const models = result.models.map(applyAutoModelType);
       setFetchedModels(result.models);
+      patchDraft({ models });
       toast.success(t("settings:providers.fetched_models", { count: result.models.length }));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("settings:providers.fetch_failed"));
@@ -216,15 +219,18 @@ export function ProvidersSection({
       await api.post("settings/provider", draft);
       const result = await api.post<{ endpoint: string; models: ProviderModel[] }>(
         "settings/provider/models",
-        { providerId: draft.id },
+        { providerId: draft.id, save: true },
       );
       if (!result.models.length) {
         toast.error(t("settings:providers.no_models_enable"));
         return;
       }
       // 与单个勾选时一致地分类 CHAT / IMAGE / EMBEDDING
+
+
       const models = result.models.map(applyAutoModelType);
       setFetchedModels(result.models);
+      patchDraft({ models });
       patchDraft({ enabled: true, models });
       toast.success(t("settings:providers.enabled_models", { count: models.length }));
     } catch (error) {
@@ -241,7 +247,7 @@ export function ProvidersSection({
       await save();
       const result = await api.post<{ value: string; endpoint: string; preview: string }>(
         "settings/provider/balance",
-        { providerId: draft.id },
+        { providerId: draft.id, save: true },
         { timeout: false },
       );
       setBalanceResult(t("settings:providers.balance_done", { value: result.value, endpoint: result.endpoint, preview: result.preview }));
