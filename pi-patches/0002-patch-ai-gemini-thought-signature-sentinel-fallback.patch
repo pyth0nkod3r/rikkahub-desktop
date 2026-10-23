@@ -1,0 +1,36 @@
+From 65e63bc287ebe6d5e32c92315011915809c7ff3c Mon Sep 17 00:00:00 2001
+From: Miracle Anyanwu <o.amagwula@stu.unizik.edu.ng>
+Date: Fri, 23 Oct 2026 10:30:36 +0100
+Subject: [PATCH] patch(ai): gemini thought signature sentinel fallback
+
+---
+ packages/ai/src/api/google-shared.ts | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/packages/ai/src/api/google-shared.ts b/packages/ai/src/api/google-shared.ts
+index 4967db17..40299ed6 100644
+--- a/packages/ai/src/api/google-shared.ts
++++ b/packages/ai/src/api/google-shared.ts
+@@ -93,6 +93,7 @@ const base64SignaturePattern = /^[A-Za-z0-9+/]+={0,2}$/;
+ 
+ function isValidThoughtSignature(signature: string | undefined): boolean {
+ 	if (!signature) return false;
++	if (signature === "skip_thought_signature_validator" || signature === "context_engineering_is_the_way_to_go") return true;
+ 	if (signature.length % 4 !== 0) return false;
+ 	return base64SignaturePattern.test(signature);
+ }
+@@ -206,7 +207,10 @@ export function convertMessages<T extends GoogleApiType>(model: Model<T>, contex
+ 						});
+ 					}
+ 				} else if (block.type === "toolCall") {
+-					const thoughtSignature = resolveThoughtSignature(isSameProviderAndModel, block.thoughtSignature);
++					let thoughtSignature = resolveThoughtSignature(isSameProviderAndModel, block.thoughtSignature);
++					if (!thoughtSignature && (requiresToolCallId(model.id) || (getGeminiMajorVersion(model.id) ?? 0) >= 3)) {
++						thoughtSignature = "skip_thought_signature_validator";
++					}
+ 					const part: Part = {
+ 						functionCall: {
+ 							name: block.name,
+-- 
+2.53.0.windows.1
+
