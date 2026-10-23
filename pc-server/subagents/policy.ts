@@ -53,7 +53,7 @@ export const SUBAGENT_CAPABILITIES: Record<string, CapabilityDef> = {
   },
   subagent: {
     wire: "subagent",
-    toolNames: ["subagent_dispatch", "subagent_list", "subagent_get", "subagent_cancel"],
+    toolNames: ["subagent_dispatch", "subagent_list", "subagent_get", "subagent_cancel", "subagent_reinject"],
   },
   keystore: {
     wire: "keystore",

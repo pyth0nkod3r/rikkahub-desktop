@@ -149,7 +149,7 @@ export async function callProvider(
   const assistant = snapshot?.assistant ?? findAssistant(conversation.assistantId);
   const picked = snapshot
     ? { provider: snapshot.provider, model: snapshot.model }
-    : findModel(assistant.chatModelId ?? state.settings.chatModelId);
+    : findModel(conversation.chatModelId ?? assistant.chatModelId ?? state.settings.chatModelId);
   const providerItem = picked.provider;
   const selectedModel = picked.model.modelId === "auto" ? "gpt-4o-mini" : picked.model.modelId;
   // 订阅供应商:凭据在服务端 oauth 里,apiKey 恒空——先经 resolveProviderAuthForProvider
@@ -318,7 +318,7 @@ export async function callProviderStreaming(
   const assistant = ctx.snapshot?.assistant ?? findAssistant(conversation.assistantId);
   const picked = ctx.snapshot
     ? { provider: ctx.snapshot.provider, model: ctx.snapshot.model }
-    : findModel(assistant.chatModelId ?? state.settings.chatModelId);
+    : findModel(conversation.chatModelId ?? assistant.chatModelId ?? state.settings.chatModelId);
   const providerItem = picked.provider;
   const selectedModel = picked.model.modelId === "auto" ? "gpt-4o-mini" : picked.model.modelId;
   // 订阅供应商:凭据在服务端 oauth 里,apiKey 恒空——先解析(可能触发锁内刷新),
@@ -1035,7 +1035,7 @@ export async function compactEngineConversation(
   const assistant = findAssistant(conversation.assistantId);
   const adapter = resolveEngine(ENGINE_REGISTRY, conversation, assistant);
   if (!adapter.compact) return null;
-  const picked = findModel(assistant.chatModelId ?? state.settings.chatModelId);
+  const picked = findModel(conversation.chatModelId ?? assistant.chatModelId ?? state.settings.chatModelId);
   // 压缩模型公共化(「设置 → 模型 → 场景模型」是公共基础设施):配置了压缩模型则
   // 所有引擎的摘要生成都用它,未配置回退会话模型。modelExists 先行:压缩模型被
   // 删除后设置残留 id 不该改变语义(findModel 对不存在 id 会兜底 chatModelId,
@@ -1091,7 +1091,7 @@ export async function generateAnswer(conversation: Conversation, regenerateAtNod
   // generating 条件本身也挡 sweep,refs 是纵深防御(abort 后 generating 先被清的窗口)。
   checkoutConversation(conversation.id);
   const assistant = findAssistant(conversation.assistantId);
-  const picked = findModel(assistant.chatModelId ?? state.settings.chatModelId);
+  const picked = findModel(conversation.chatModelId ?? assistant.chatModelId ?? state.settings.chatModelId);
   // T1:路由在入口一次判定并贯穿本次生成(与 P1-4 配置快照同理)——引擎选择收敛为
   // 注册表 resolveEngine(pi 命中工作区三道闸即接管,否则 chat 兜底)。续跑/暂停语义
   // 不再写死 "!piRuntime",改读 adapter.resumeSemantics。
@@ -1177,6 +1177,9 @@ export async function generateAnswer(conversation: Conversation, regenerateAtNod
       // 注入生成级 signal（工作区工具据此取消，bash 连杀进程树）与部分输出回写
       // （bash 执行中把尾部输出写进 tool part，走现有 touchStream 合帧管线）。
       const raw = await executeToolCall(toolCall, assistant, {
+        conversationId: conversation.id,
+        conversationTitle: conversation.title,
+        messageNodeId: session.node.id,
         ...context,
         signal: controller.signal,
         onToolPartialOutput: (output) => applyEvent({ kind: "tool_result", toolCallId: toolCall.id, output, final: false }),

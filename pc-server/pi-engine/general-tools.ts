@@ -28,7 +28,16 @@ import { PROPOSE_PLAN_TOOL_NAME, proposePlanToolSchema, parseProposePlanInput, f
 import type { ToolDefinition } from "../../pi/packages/coding-agent/src/core/extensions/types.ts";
 import type { Assistant, Conversation, JsonValue, Model, ToolOutputEntry } from "../foundation/types";
 import type { GenerationEventSink, GenerationTarget } from "../inference-engine/events";
-import { openAiLocalTools, openAiMcpTools, openAiSearchTools } from "../tools/bound";
+import {
+  openAiAutomationTools,
+  openAiBrowserTools,
+  openAiLocalTools,
+  openAiMcpTools,
+  openAiSearchTools,
+  openAiSshTools,
+  openAiSubAgents,
+  openAiTelegramTools,
+} from "../tools/bound";
 import { SubAgentToolPolicies } from "../subagents/policy";
 import { executeToolCall, realizeToolResult, toolResultToParts } from "../tools/execution";
 import { openAiToolOutput } from "../tools/format";
@@ -182,6 +191,11 @@ export function createPiGeneralTools(ctx: PiGeneralToolsContext): ToolDefinition
       (tool) => tool.function.name === "save_memory" || tool.function.name === ASK_USER_TOOL_NAME,
     ),
     ...openAiMcpTools(ctx.assistant),
+    ...openAiSubAgents(),
+    ...openAiAutomationTools(),
+    ...openAiBrowserTools(),
+    ...openAiSshTools(),
+    ...openAiTelegramTools(),
   ];
   const declarations = SubAgentToolPolicies.isSubAgent(ctx.conversation.id)
     ? allDeclarations.filter((d) => SubAgentToolPolicies.permits(ctx.conversation.id, String(d.function.name)))

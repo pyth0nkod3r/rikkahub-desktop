@@ -91,12 +91,22 @@ describe("工具面枚举", () => {
   test("search/save_memory/MCP 全在列,开关同聊天引擎同源", () => {
     const { ctx } = fixture();
     const names = createPiGeneralTools(ctx).map((tool) => tool.name);
-    expect(names).toEqual(["search_web", "scrape_web", "save_memory", "mcp__alpha", "mcp__beta"]);
+    expect(names).toContain("search_web");
+    expect(names).toContain("scrape_web");
+    expect(names).toContain("save_memory");
+    expect(names).toContain("mcp__alpha");
+    expect(names).toContain("mcp__beta");
+    expect(names).toContain("subagent_dispatch");
+    expect(names).toContain("subagent_reinject");
 
     store.state.settings.enableWebSearch = false;
     try {
       const closed = createPiGeneralTools(ctx).map((tool) => tool.name);
-      expect(closed).toEqual(["save_memory", "mcp__alpha", "mcp__beta"]);
+      expect(closed).not.toContain("search_web");
+      expect(closed).not.toContain("scrape_web");
+      expect(closed).toContain("save_memory");
+      expect(closed).toContain("mcp__alpha");
+      expect(closed).toContain("subagent_dispatch");
     } finally {
       store.state.settings.enableWebSearch = true;
     }

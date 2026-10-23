@@ -164,6 +164,36 @@ Pass a clear, self-contained task. For long-running work, set run_in_background=
         },
       },
     },
+      {
+      type: "function" as const,
+      function: {
+        name: "subagent_reinject",
+        description:
+          "Reinject a prompt to continue an existing sub-agent run (e.g. if it failed, timed out, or stopped before completing its task). All previous context and findings are preserved.",
+        parameters: {
+          type: "object",
+          properties: {
+            id: {
+              type: "string",
+              description: "The unique run ID of the sub-agent to continue.",
+            },
+            prompt: {
+              type: "string",
+              description: "The prompt or continuation instruction to reinject into the sub-agent.",
+            },
+            run_in_background: {
+              type: "boolean",
+              description: "If true, returns immediately while sub-agent continues in background.",
+            },
+            timeout_seconds: {
+              type: "number",
+              description: "Optional timeout in seconds for this continuation run.",
+            },
+          },
+          required: ["id", "prompt"],
+        },
+      },
+    },
   ];
 }
 
@@ -245,6 +275,24 @@ export async function executeSubAgentTool(
       registry.update(id, (r) => ({ ...r, status: "cancelled", finishedAtMs: Date.now() }));
     }
     return { ok, id };
+  }
+
+  if (toolName === "subagent_reinject") {
+    const id = String(args.id ?? "").trim();
+    if (!id) throw new Error("id is required for subagent_reinject");
+    const prompt = String(args.prompt ?? "").trim();
+    if (!prompt) throw new Error("prompt is required for subagent_reinject");
+
+    const res = await engine.reinject(id, prompt, {
+      timeoutSeconds: args.timeout_seconds ? Number(args.timeout_seconds) : undefined,
+      runInBackground: Boolean(args.run_in_background),
+    });
+
+    if (!res.ok) {
+      throw new Error(`[subagent_reinject error ${res.error}] ${res.detail}`);
+    }
+
+    return encodeRun(res.run);
   }
 
   throw new Error(`Unknown subagent tool: ${toolName}`);

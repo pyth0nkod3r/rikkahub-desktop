@@ -331,6 +331,8 @@ export interface Conversation {
   engineCompactions?: JsonValue[] | null;
   /** 会话 Agent 模式: plan=规划模式, build=构建执行模式(默认)。 */
   agentMode?: "build" | "plan";
+  /** 会话级覆盖模型 ID (如子智能体指定模型)。缺省 = 继承助手/全局。 */
+  chatModelId?: string | null;
 }
 
 // ----- 工作区(agent 模式)领域模型 -----

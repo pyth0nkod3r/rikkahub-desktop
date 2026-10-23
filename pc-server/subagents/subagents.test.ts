@@ -1,3 +1,5 @@
+import { openAiSubAgentTools } from "../tools/subagent-tools";
+import { SubAgentEngine } from "./engine";
 // subagents/subagents.test.ts — Unit tests for Sub-Agents Harness
 import { describe, expect, it } from "bun:test";
 import {
@@ -266,5 +268,41 @@ describe("SubAgentRegistry", () => {
     registry.update("run-test-1", (r) => ({ ...r, status: "succeeded" }));
     expect(registry.activeCountForAssistant("asst-1")).toBe(0);
     expect(registry.globalActiveCount()).toBe(0);
+  });
+});
+
+describe("SubAgent Reinjection & Extended Tools", () => {
+  it("openAiSubAgentTools includes subagent_reinject", () => {
+    const tools = openAiSubAgentTools([]);
+    const names = tools.map((t) => t.function.name);
+    expect(names).toContain("subagent_dispatch");
+    expect(names).toContain("subagent_list");
+    expect(names).toContain("subagent_get");
+    expect(names).toContain("subagent_cancel");
+    expect(names).toContain("subagent_reinject");
+  });
+
+  it("subagent capability definition includes subagent_reinject", () => {
+    const policyResult = buildSubAgentToolPolicy([], ["subagent"]);
+    expect(policyResult.ok).toBe(true);
+    if (!policyResult.ok) return;
+    expect(policyResult.policy.allows("subagent_reinject")).toBe(true);
+  });
+
+  it("SubAgentEngine.reinject validates input and returns error for non-existent run", async () => {
+    const registry = new SubAgentRegistry();
+    const engine = new SubAgentEngine(registry);
+
+    const blankRes = await engine.reinject("fake-id", "   ");
+    expect(blankRes.ok).toBe(false);
+    if (!blankRes.ok) {
+      expect(blankRes.error).toBe("invalid_request");
+    }
+
+    const notFoundRes = await engine.reinject("non-existent-run-id", "Please continue");
+    expect(notFoundRes.ok).toBe(false);
+    if (!notFoundRes.ok) {
+      expect(notFoundRes.error).toBe("not_found");
+    }
   });
 });

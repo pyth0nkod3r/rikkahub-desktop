@@ -98,6 +98,28 @@ export async function handleSubAgentRoutes(
     }
   }
 
+  // Reinject prompt into a run
+  const reinjectMatch = path.match(/^subagents\/runs\/([^/]+)\/reinject$/);
+  if (reinjectMatch && request.method === "POST") {
+    const runId = decodeURIComponent(reinjectMatch[1]);
+    const body = await readJson<{
+      prompt?: string;
+      timeoutSeconds?: number;
+      runInBackground?: boolean;
+    }>(request);
+    const prompt = String(body?.prompt ?? "").trim();
+    if (!prompt) return error("prompt is required", 400);
+
+    const res = await subAgentEngine.reinject(runId, prompt, {
+      timeoutSeconds: body?.timeoutSeconds,
+      runInBackground: body?.runInBackground,
+    });
+    if (!res.ok) {
+      return error(res.detail, 400, res.error);
+    }
+    return json(res.run, { status: 202 });
+  }
+
   // Direct dispatch endpoint
   if (path === "subagents/dispatch" && request.method === "POST") {
     const body = await readJson<{

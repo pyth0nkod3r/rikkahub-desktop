@@ -11,7 +11,7 @@ import {
 import { checkoutConversation, registerConversation, releaseConversation } from "../conversations/working-set";
 import { generateAnswer } from "../conversations/orchestrator";
 import { abortGeneration, generating } from "../conversations/generation-state";
-import { broadcastConversation, broadcastNodeUpdate } from "../api/sse";
+import { broadcastConversation, broadcastList, broadcastNodeUpdate } from "../api/sse";
 import { findAssistant } from "../conversations/helpers";
 import {
   SubAgentDefaults,
@@ -25,7 +25,7 @@ import {
   buildSubAgentToolPolicy,
   SubAgentToolPolicies,
 } from "./policy";
-import { listSubAgentProfiles } from "./db";
+import { getSubAgentRun, listSubAgentProfiles } from "./db";
 import { subAgentRegistry, SubAgentRegistry } from "./registry";
 
 export type ModelResolutionResult =
@@ -306,15 +306,22 @@ export class SubAgentEngine {
     }
     const toolPolicy = policyBuilt.policy;
 
-    // Check parent conversation's workspace binding
+    // Check parent conversation's workspace binding & assistant
     let workspaceId: string | null = null;
     let workspaceCwd: string | null = null;
+    let effectiveAssistantId = parentAssistantId?.trim();
     if (parentChatId) {
       const parentConv = getConversation(parentChatId);
-      if (parentConv?.workspaceId) {
-        workspaceId = parentConv.workspaceId;
-        workspaceCwd = parentConv.workspaceCwd ?? null;
+      if (parentConv) {
+        if (!effectiveAssistantId) effectiveAssistantId = parentConv.assistantId;
+        if (parentConv.workspaceId) {
+          workspaceId = parentConv.workspaceId;
+          workspaceCwd = parentConv.workspaceCwd ?? null;
+        }
       }
+    }
+    if (!effectiveAssistantId) {
+      effectiveAssistantId = state?.settings?.assistantId ?? "";
     }
 
     // Create isolated conversation
@@ -322,7 +329,8 @@ export class SubAgentEngine {
     const now = Date.now();
     const subConversation: Conversation = {
       id: subConvId,
-      assistantId: parentAssistantId,
+      assistantId: effectiveAssistantId,
+      chatModelId: resolvedChatModelId,
       systemPrompt: subAgentSystemPrompt,
       title: `[Sub-agent] ${request.label ?? request.task.slice(0, 40)}`,
       messages: [],
@@ -346,6 +354,7 @@ When you have finished, end with one short paragraph in plain text that summaris
 
     registerConversation(subConversation);
     persistConversation(subConversation);
+    broadcastList();
 
     this.registry.update(runId, (r) => ({
       ...r,
@@ -385,6 +394,9 @@ When you have finished, end with one short paragraph in plain text that summaris
       if (outcome === "timed_out") {
         abortGeneration(subConvId, "interrupted");
         this.markTerminal(runId, "timed_out", `Exceeded ${request.timeoutSeconds}-second cap`);
+        const convToSave = getConversation(subConvId) ?? subConversation;
+        persistConversation(convToSave);
+        broadcastList();
         this.notifyParentIfBackground(parentChatId, this.registry.get(runId));
         return;
       }
@@ -400,6 +412,8 @@ When you have finished, end with one short paragraph in plain text that summaris
         finishedAtMs: Date.now(),
       }));
 
+      persistConversation(updatedConv);
+      broadcastList();
       this.notifyParentIfBackground(parentChatId, this.registry.get(runId));
     } catch (err: unknown) {
       if (timer) clearTimeout(timer);
@@ -409,6 +423,183 @@ When you have finished, end with one short paragraph in plain text that summaris
       const status: SubAgentStatus = isAbort ? "cancelled" : "failed";
       const errorMsg = err instanceof Error ? err.message : String(err);
       this.markTerminal(runId, status, errorMsg);
+      const convToSave = getConversation(subConvId) ?? subConversation;
+      persistConversation(convToSave);
+      broadcastList();
+      this.notifyParentIfBackground(parentChatId, this.registry.get(runId));
+    } finally {
+      SubAgentToolPolicies.unregister(subConvId);
+      this.registry.clearJob(runId);
+    }
+  }
+
+  async reinject(
+    runOrConvId: string,
+    continuationPrompt: string,
+    options?: {
+      timeoutSeconds?: number;
+      runInBackground?: boolean;
+    },
+  ): Promise<DispatchResult> {
+    const trimmedPrompt = continuationPrompt.trim();
+    if (!trimmedPrompt) {
+      return { ok: false, error: "invalid_request", detail: "continuation prompt cannot be blank" };
+    }
+
+    let run = this.registry.get(runOrConvId);
+    if (!run) {
+      const allRuns = this.registry.list();
+      run = allRuns.find((r) => r.subConversationId === runOrConvId) ?? getSubAgentRun(runOrConvId) ?? null;
+    }
+    if (!run) {
+      return { ok: false, error: "not_found", detail: `Sub-agent run '${runOrConvId}' not found` };
+    }
+
+    if (run.status === "running") {
+      return {
+        ok: false,
+        error: "already_running",
+        detail: `Sub-agent run '${run.id}' is currently running`,
+      };
+    }
+
+    if (!run.subConversationId) {
+      return {
+        ok: false,
+        error: "no_conversation",
+        detail: `Sub-agent run '${run.id}' has no associated sub-conversation`,
+      };
+    }
+
+    const subConversation = getConversation(run.subConversationId);
+    if (!subConversation) {
+      return {
+        ok: false,
+        error: "conversation_not_found",
+        detail: `Conversation '${run.subConversationId}' not found`,
+      };
+    }
+
+    const taskWithWrapup = `${trimmedPrompt}
+
+When you have finished, end with one short paragraph in plain text that summarises what you did and what you found. Do NOT stop on a tool call — finish with assistant text. The dispatcher harvests only your final text reply, so this paragraph is the entire response the parent sees.`;
+
+    const userMsg = createMessage("USER", [{ type: "text", text: taskWithWrapup }]);
+    const userNode: MessageNode = { id: newId(), messages: [userMsg], selectIndex: 0 };
+    subConversation.messages.push(userNode);
+    subConversation.updateAt = Date.now();
+
+    persistConversation(subConversation);
+    broadcastList();
+
+    const timeoutSeconds = options?.timeoutSeconds ?? run.timeoutSeconds ?? SubAgentDefaults.DEFAULT_TIMEOUT_SECONDS;
+    const runInBackground = options?.runInBackground ?? false;
+
+    const controller = new AbortController();
+    this.registry.update(run.id, (r) => ({
+      ...r,
+      status: "running",
+      error: null,
+      timeoutSeconds,
+      runInBackground,
+      startedAtMs: Date.now(),
+    }));
+    this.registry.setJob(run.id, controller);
+
+    const policyBuilt = buildSubAgentToolPolicy(run.tools ?? [], run.capabilities ?? []);
+    const toolPolicy = policyBuilt.ok ? policyBuilt.policy : new SubAgentToolPolicy([]);
+
+    const executionPromise = this.executeReinjection(
+      run.id,
+      run.parentAssistantId,
+      run.parentChatId,
+      run.subConversationId,
+      subConversation,
+      toolPolicy,
+      timeoutSeconds,
+      controller,
+    );
+
+    if (runInBackground) {
+      void executionPromise.catch((err) => {
+        console.error(`[subagent] background reinject execution failed for ${run.id}:`, err);
+      });
+      return { ok: true, run: this.registry.get(run.id) ?? run };
+    } else {
+      await executionPromise;
+      return { ok: true, run: this.registry.get(run.id) ?? run };
+    }
+  }
+
+  private async executeReinjection(
+    runId: string,
+    parentAssistantId: string,
+    parentChatId: string | null,
+    subConvId: string,
+    subConversation: Conversation,
+    toolPolicy: SubAgentToolPolicy,
+    timeoutSeconds: number,
+    controller: AbortController,
+  ): Promise<void> {
+    SubAgentToolPolicies.register(subConvId, toolPolicy);
+    let timer: NodeJS.Timeout | null = null;
+    const timeoutMs = timeoutSeconds * 1000;
+
+    try {
+      const timeoutPromise = new Promise<"timed_out">((resolve) => {
+        timer = setTimeout(() => {
+          resolve("timed_out");
+        }, timeoutMs);
+      });
+
+      const generationPromise = (async () => {
+        checkoutConversation(subConvId);
+        try {
+          await generateAnswer(subConversation);
+          return "completed" as const;
+        } finally {
+          releaseConversation(subConvId);
+        }
+      })();
+
+      const outcome = await Promise.race([generationPromise, timeoutPromise]);
+      if (timer) clearTimeout(timer);
+
+      if (outcome === "timed_out") {
+        abortGeneration(subConvId, "interrupted");
+        this.markTerminal(runId, "timed_out", `Exceeded ${timeoutSeconds}-second cap on continuation`);
+        const convToSave = getConversation(subConvId) ?? subConversation;
+        persistConversation(convToSave);
+        broadcastList();
+        this.notifyParentIfBackground(parentChatId, this.registry.get(runId));
+        return;
+      }
+
+      const updatedConv = getConversation(subConvId) ?? subConversation;
+      const finalText = this.harvestFinalText(updatedConv);
+
+      this.registry.update(runId, (r) => ({
+        ...r,
+        status: "succeeded",
+        result: finalText,
+        error: null,
+        finishedAtMs: Date.now(),
+      }));
+
+      persistConversation(updatedConv);
+      broadcastList();
+      this.notifyParentIfBackground(parentChatId, this.registry.get(runId));
+    } catch (err: unknown) {
+      if (timer) clearTimeout(timer);
+      const isAbort =
+        controller.signal.aborted ||
+        (err instanceof DOMException && err.name === "AbortError");
+      const status: SubAgentStatus = isAbort ? "cancelled" : "failed";
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      this.markTerminal(runId, status, errorMsg);
+      const convToSave = getConversation(subConvId) ?? subConversation;
+      persistConversation(convToSave);
+      broadcastList();
       this.notifyParentIfBackground(parentChatId, this.registry.get(runId));
     } finally {
       SubAgentToolPolicies.unregister(subConvId);
@@ -423,6 +614,7 @@ When you have finished, end with one short paragraph in plain text that summaris
       error: error ?? null,
       finishedAtMs: Date.now(),
     }));
+    broadcastList();
   }
 
   private harvestFinalText(conversation: Conversation): string {

@@ -7,9 +7,9 @@ import type { SubAgentProfile, SubAgentRun, SubAgentStatus } from "./types";
 
 const ensuredDbs = new WeakSet<Database>();
 
-function db(): Database {
+function db(): Database | null {
   const handle = getConversationsDb();
-  if (!handle) throw new Error("conversations db not open");
+  if (!handle) return null;
   if (!ensuredDbs.has(handle)) {
     handle.exec(`
       CREATE TABLE IF NOT EXISTS pc_subagent_profile (
@@ -154,21 +154,27 @@ function rowToRun(row: RunRow): SubAgentRun {
 // ---------------- Profile CRUD ----------------
 
 export function listSubAgentProfiles(): SubAgentProfile[] {
-  const rows = db()
+  const handle = db();
+  if (!handle) return [];
+  const rows = handle
     .prepare("SELECT * FROM pc_subagent_profile ORDER BY name COLLATE NOCASE ASC")
     .all() as ProfileRow[];
   return rows.map(rowToProfile);
 }
 
 export function getSubAgentProfile(id: string): SubAgentProfile | null {
-  const row = db()
+  const handle = db();
+  if (!handle) return null;
+  const row = handle
     .prepare("SELECT * FROM pc_subagent_profile WHERE id = ?")
     .get(id) as ProfileRow | null;
   return row ? rowToProfile(row) : null;
 }
 
 export function upsertSubAgentProfile(profile: SubAgentProfile): void {
-  db()
+  const handle = db();
+  if (!handle) return;
+  handle
     .prepare(
       `INSERT INTO pc_subagent_profile (
         id, name, description, system_prompt, model_id, enabled, tools, capabilities, created_at, updated_at
@@ -198,14 +204,18 @@ export function upsertSubAgentProfile(profile: SubAgentProfile): void {
 }
 
 export function deleteSubAgentProfile(id: string): boolean {
-  const result = db().prepare("DELETE FROM pc_subagent_profile WHERE id = ?").run(id);
+  const handle = db();
+  if (!handle) return false;
+  const result = handle.prepare("DELETE FROM pc_subagent_profile WHERE id = ?").run(id);
   return result.changes > 0;
 }
 
 // ---------------- Run CRUD ----------------
 
 export function insertSubAgentRun(run: SubAgentRun): void {
-  db()
+  const handle = db();
+  if (!handle) return;
+  handle
     .prepare(
       `INSERT INTO pc_subagent_run (
         id, parent_conversation_id, parent_assistant_id, sub_conversation_id,
@@ -242,7 +252,9 @@ export function insertSubAgentRun(run: SubAgentRun): void {
 }
 
 export function updateSubAgentRun(run: SubAgentRun): void {
-  db()
+  const handle = db();
+  if (!handle) return;
+  handle
     .prepare(
       `UPDATE pc_subagent_run SET
         sub_conversation_id = ?,
@@ -269,7 +281,9 @@ export function updateSubAgentRun(run: SubAgentRun): void {
 }
 
 export function getSubAgentRun(id: string): SubAgentRun | null {
-  const row = db().prepare("SELECT * FROM pc_subagent_run WHERE id = ?").get(id) as RunRow | null;
+  const handle = db();
+  if (!handle) return null;
+  const row = handle.prepare("SELECT * FROM pc_subagent_run WHERE id = ?").get(id) as RunRow | null;
   return row ? rowToRun(row) : null;
 }
 
@@ -292,6 +306,8 @@ export function listSubAgentRuns(opts?: {
   sql += " ORDER BY started_at_ms DESC LIMIT ?";
   params.push(limit);
 
-  const rows = db().prepare(sql).all(...params) as RunRow[];
+  const handle = db();
+  if (!handle) return [];
+  const rows = handle.prepare(sql).all(...params) as RunRow[];
   return rows.map(rowToRun);
 }

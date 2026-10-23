@@ -45,6 +45,8 @@ export function openAiMcpTools(assistant: Assistant) {
  *  pi-engine/workspace-tools 承载),不可用时旧挂载本就返回空,两头皆死代码。
  *  model 用于防双搜门控(见 openAiSearchTools):调用方在聊天引擎各装配点都能拿到
  *  picked.model/modelItem,务必传入以启用外挂让位;缺省则退化为只看全局开关。 */
+export { openAiAutomationTools, openAiBrowserTools, openAiSshTools, openAiTelegramTools };
+
 export function openAiSubAgents() {
   return openAiSubAgentTools();
 }
