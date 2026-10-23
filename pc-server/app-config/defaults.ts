@@ -50,6 +50,7 @@ export function defaultSettings(): Settings {
     themeId: "default",
     developerMode: false,
     displaySetting: {
+      language: "en-US",
       userAvatar: { type: "dummy" },
       userNickname: "",
       showUserAvatar: true,

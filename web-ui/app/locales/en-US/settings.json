@@ -232,7 +232,10 @@
     },
     "font_title": "Fonts",
     "display_title": "Chat display",
-    "avatar": "Avatar"
+    "avatar": "Avatar",
+    "language_title": "Language",
+    "language_desc": "Select the interface display language.",
+    "language_label": "Interface Language"
   },
   "providers": {
     "add": "Add provider",
@@ -1196,7 +1199,14 @@
       "orphan_stats": "Attachment stats: {{orphans}} entries no longer referenced (~{{orphanMb}} MB); {{untracked}} untracked files (~{{untrackedMb}} MB). Nothing is deleted automatically; back up first if you want to clean up",
       "hygiene_failed": "Data directory cleanup task failed; harmless, will retry on next launch",
       "output_limit_unknown": "The maximum output length for {{model}} is unknown; sent the conservative default {{fallback}}. If this model rejects it with an invalid max_tokens error, set the max output length manually in the assistant settings",
-      "voice_provider_preserved": "Detected voice services from the mobile app ({{types}}) that this desktop app doesn't support yet. Their configuration is preserved as-is for round-trip and won't be lost"
+      "voice_provider_preserved": "Detected voice services from the mobile app ({{types}}) that this desktop app doesn't support yet. Their configuration is preserved as-is for round-trip and won't be lost",
+      "pi_compaction_failed": "Conversation context compaction failed; continuing may exceed the model's context window",
+      "pi_steer_failed": "Failed to inject follow-up message into workspace session (session may have finished)",
+      "pi_skill_diagnostic": "Skill resource diagnostic: {{message}}{{path}}",
+      "compact_summarizer_fallback": "Summarization model {{model}} cannot be used in workspace engine; falling back to conversation model",
+      "previous_unclean_exit": "Previous session was not terminated cleanly (possible crash or forced termination)",
+      "oauth_modify_failed": "OAuth credential modification failed",
+      "process_kill_failed": "Failed to terminate process: {{pid}}"
     }
   },
   "model_edit": {

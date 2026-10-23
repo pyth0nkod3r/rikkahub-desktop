@@ -232,7 +232,10 @@
     },
     "font_title": "字体字号",
     "display_title": "对话显示",
-    "avatar": "头像"
+    "avatar": "头像",
+    "language_title": "界面语言",
+    "language_desc": "选择界面的显示语言。",
+    "language_label": "界面语言"
   },
   "providers": {
     "add": "添加供应商",
@@ -1196,7 +1199,14 @@
       "orphan_stats": "附件目录统计：{{orphans}} 个条目已无引用，约 {{orphanMb}} MB；另有 {{untracked}} 个无记录文件，约 {{untrackedMb}} MB。不会自动删除，如需清理请先备份",
       "hygiene_failed": "数据目录清理任务失败，不影响运行，下次启动重试",
       "output_limit_unknown": "模型 {{model}} 的最大输出长度未知，已按保守默认 {{fallback}} 发送。若该模型报「max_tokens 非法」，请在助手设置里手动指定最大输出长度",
-      "voice_provider_preserved": "检测到来自 APP端的语音服务（{{types}}），桌面端暂不支持，已原样保留配置以便回传，不会丢失"
+      "voice_provider_preserved": "检测到来自 APP端的语音服务（{{types}}），桌面端暂不支持，已原样保留配置以便回传，不会丢失",
+      "pi_compaction_failed": "会话上下文压缩失败，继续对话可能超出模型上下文窗口",
+      "pi_steer_failed": "补发消息注入工作区会话失败（会话可能已收束）",
+      "pi_skill_diagnostic": "技能资源诊断：{{message}}{{path}}",
+      "compact_summarizer_fallback": "压缩模型 {{model}} 无法在工作区引擎使用，本次压缩改用会话模型",
+      "previous_unclean_exit": "上次应用未正常退出（可能是异常崩溃或强制终止）",
+      "oauth_modify_failed": "OAuth 凭据变更失败",
+      "process_kill_failed": "进程终止失败：{{pid}}"
     }
   },
   "model_edit": {

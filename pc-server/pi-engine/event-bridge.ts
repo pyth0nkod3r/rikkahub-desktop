@@ -355,7 +355,7 @@ export function createPiEventBridge() {
         // 失败重复打扰;threshold/overflow = 生成期间自动压缩,用户不知情,失败必须上报
         // (压缩没发生=后续可能上下文溢出)。
         if (event.errorMessage && event.reason !== "manual") {
-          reportError("pi-engine", "error", "会话上下文压缩失败,继续对话可能超出模型上下文窗口", event.errorMessage);
+          reportError("pi-engine", "error", "会话上下文压缩失败,继续对话可能超出模型上下文窗口", event.errorMessage, "pi_compaction_failed");
         }
         return [{ kind: "engine_status", status: { busy: false } }];
       }

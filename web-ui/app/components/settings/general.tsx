@@ -10,6 +10,8 @@ import { CHAT_CJK_OVERRIDE_FAMILY, UI_CJK_OVERRIDE_FAMILY } from "~/lib/font-cha
 import { KeybindingSettings } from "~/components/keybinding-settings";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
+import i18n from "~/i18n";
 import { Slider } from "~/components/ui/slider";
 import { patchDisplay, patchSettingsLocal, saveDisplayPatch } from "~/lib/settings-patch";
 import api from "~/services/api";
@@ -169,6 +171,29 @@ export function AppSection({ settings }: PageProps) {
         </SettingsRows>
       </SettingsGroup>
 
+      <SettingsGroup
+        title={t("settings:general.language_title", "Language")}
+        description={t("settings:general.language_desc", "Select the interface display language.")}
+        fields
+      >
+        <SettingsField label={t("settings:general.language_label", "Interface Language")}>
+          <Select
+            value={display.language ?? i18n.language ?? "en-US"}
+            onValueChange={(val) => {
+              void i18n.changeLanguage(val);
+              patchDisplay({ language: val });
+            }}
+          >
+            <SelectTrigger className="w-48 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="en-US">English</SelectItem>
+              <SelectItem value="zh-CN">简体中文</SelectItem>
+            </SelectContent>
+          </Select>
+        </SettingsField>
+      </SettingsGroup>
       <SettingsGroup
         title={t("settings:general.retry_title", "自动重试")}
         description={t("settings:general.retry_description", "上游响应异常或限流时自动重试的最大次数（默认 3 次，可按需调高）")}

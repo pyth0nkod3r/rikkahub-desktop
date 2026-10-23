@@ -20,7 +20,7 @@ const SUPPORTED_LANGUAGES = ["zh-CN", "en-US"] as const;
 
 function getInitialLanguage(): (typeof SUPPORTED_LANGUAGES)[number] {
   if (typeof window === "undefined") {
-    return "zh-CN";
+    return "en-US";
   }
 
   // 专题8:语言的权威存储在后端 displaySetting.language(root.tsx 负责快照跟随与
@@ -61,7 +61,7 @@ void i18n.use(initReactI18next).init({
     },
   },
   lng: getInitialLanguage(),
-  fallbackLng: "zh-CN",
+  fallbackLng: "en-US",
   supportedLngs: [...SUPPORTED_LANGUAGES],
   defaultNS: "common",
   ns: ["common", "input", "markdown", "message", "page", "settings"],
