@@ -81,6 +81,15 @@ const ZERO_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 // models.dev 真实值（影响 pi 自动压缩阈值 contextWindow-reserveTokens 与请求 max_tokens），
 // 查不到时用保守通用默认——128k 窗口宁可让大窗口模型早压缩，也不给小窗口模型虚报。
 const DEFAULT_CONTEXT_WINDOW = 128_000;
+
+/** 当目录与用户配置均未指定上下文窗口时,按模型名族系做合理推断,防大窗口模型被 128k 误判静默溢出。 */
+export function inferContextWindowFallback(modelId: string): number {
+  const lower = modelId.toLowerCase();
+  if (/gemini|glm|qwen/i.test(lower)) return 1_048_576;
+  if (/deepseek/i.test(lower)) return /flash/i.test(lower) ? 1_048_576 : 128_000;
+  if (/kimi|moonshot|claude/i.test(lower)) return 200_000;
+  return DEFAULT_CONTEXT_WINDOW;
+}
 // 输出上限兜底与聊天引擎同源(DEFAULT_OUTPUT_TOKENS,方言单源)。注意 pi 的
 // ProviderConfigInput.models[].maxTokens 是**必填 number**,且其 buildBaseOptions 用
 // `options?.maxTokens ?? model.maxTokens` 兜底、对 OpenAI 兼容协议也会发上限字段——
@@ -637,7 +646,7 @@ export function mapProviderModelToPi(provider: Provider, model: Model, limits?: 
   const contextWindow =
     typeof limits?.contextWindow === "number" && limits.contextWindow > 0
       ? limits.contextWindow
-      : (typeof model.contextLength === "number" && model.contextLength > 0 ? model.contextLength : DEFAULT_CONTEXT_WINDOW);
+      : (typeof model.contextLength === "number" && model.contextLength > 0 ? model.contextLength : inferContextWindowFallback(model.modelId));
   // 上限由调用方经 limits 注入(orchestrator 走 model-providers/model-limits 的
   // requiredOutputCap——与聊天引擎 Claude 分支同一个函数,已含"目录脏行剔除 + 收进窗口")。
   // 本模块不再二次钳制:那会让同一配置下两引擎发出不同的数(单源之外再加一层就是新的

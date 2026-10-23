@@ -273,6 +273,25 @@ describe("mapProviderModelToPi", () => {
     expect(resExplicit.mapping.config.models?.[0]?.maxTokens).toBe(384_000);
   });
 
+  it("未配置 contextLength 时按模型族系推断 fallback 窗口,防大窗口模型被 128k 误判静默溢出", () => {
+    const relay = makeProvider({ id: "p1", name: "Kiosapi", baseUrl: "https://api.kiosapi.com/v1" });
+    const dsFlash = mapProviderModelToPi(relay, model("deepseek-v4.1-flash-free"));
+    if (!dsFlash.ok) throw new Error(dsFlash.reason);
+    expect(dsFlash.mapping.config.models?.[0]?.contextWindow).toBe(1_048_576);
+
+    const glm = mapProviderModelToPi(relay, model("glm-5.3-flash-free"));
+    if (!glm.ok) throw new Error(glm.reason);
+    expect(glm.mapping.config.models?.[0]?.contextWindow).toBe(1_048_576);
+
+    const kimi = mapProviderModelToPi(relay, model("kimi-k3-preview"));
+    if (!kimi.ok) throw new Error(kimi.reason);
+    expect(kimi.mapping.config.models?.[0]?.contextWindow).toBe(200_000);
+
+    const generic = mapProviderModelToPi(relay, model("custom-tiny-model"));
+    if (!generic.ok) throw new Error(generic.reason);
+    expect(generic.mapping.config.models?.[0]?.contextWindow).toBe(128_000);
+  });
+
   it("能力/模态位翻译:REASONING→reasoning,IMAGE→input 含 image", () => {
     const result = mapProviderModelToPi(
       makeProvider({ id: "p1", name: "P", baseUrl: "https://x/v1" }),

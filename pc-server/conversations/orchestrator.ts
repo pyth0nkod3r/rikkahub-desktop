@@ -731,9 +731,22 @@ async function runPostGenerationTasks(conversationId: string, snapshot: Conversa
  *  (决定 pi 自动压缩阈值),maxTokens 走 requiredOutputCap —— 与聊天引擎 Claude 分支
  *  **同一个函数**,不是"同源口径"的口头约定。pi 的模型配置要求必须给出 maxTokens
  *  (它会恒发上限字段),所以这里同样属于"协议逼我给数"的场合。 */
-function piModelLimitsFor(provider: Provider, model: Model, assistant: Assistant) {
+function piModelLimitsFor(provider: Provider, model: Model, assistant: Assistant, conversation?: Conversation) {
   const modelContext = typeof model.contextLength === "number" && model.contextLength > 0 ? model.contextLength : null;
-  const contextWindow = modelContext ?? contextWindowFor(modelsDevCache, provider, model.modelId);
+  let contextWindow = modelContext ?? contextWindowFor(modelsDevCache, provider, model.modelId);
+  if (conversation) {
+    let maxObservedTokens = 0;
+    for (const msg of selectedConversationMessages(conversation)) {
+      const tokens = msg.usage?.promptTokens ?? 0;
+      if (tokens > maxObservedTokens) maxObservedTokens = tokens;
+    }
+    if (maxObservedTokens > 0) {
+      const observedFloor = maxObservedTokens + 32_768;
+      if (contextWindow == null || observedFloor > contextWindow) {
+        contextWindow = observedFloor;
+      }
+    }
+  }
   return {
     contextWindow,
     maxTokens: requiredOutputCap(modelsDevCache, provider, model.modelId, assistant.maxTokens),
@@ -866,7 +879,7 @@ async function runPiWorkspaceGeneration(
   const result = await runPiGeneration({
     provider: deps.providerItem,
     model: deps.selectedModel,
-    modelLimits: piModelLimitsFor(deps.providerItem, deps.selectedModel, deps.assistant),
+    modelLimits: piModelLimitsFor(deps.providerItem, deps.selectedModel, deps.assistant, conversation),
     // 思考强度与聊天引擎同源(助手设置);pi 档位翻译见 model-bridge piThinkingLevelFor。
     reasoningLevel: deps.assistant.reasoningLevel,
     conversationId: conversation.id,
@@ -991,7 +1004,7 @@ async function runPiWorkspaceCompaction(
   const result = await runPiCompaction({
     provider: summarizer.provider,
     model: summarizer.model,
-    modelLimits: piModelLimitsFor(summarizer.provider, summarizer.model, assistant),
+    modelLimits: piModelLimitsFor(summarizer.provider, summarizer.model, assistant, ctx.conversation),
     reasoningLevel: assistant.reasoningLevel,
     conversationId: conversation.id,
     cwd: runtime.cwd,

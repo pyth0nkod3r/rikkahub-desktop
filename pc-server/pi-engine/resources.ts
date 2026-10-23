@@ -191,6 +191,7 @@ export async function createPiSessionResources(options: {
     {
       compaction: {
         enabled: true,
+        reserveTokens: 32_768,
         ...(compactionKeepRecentTokens != null ? { keepRecentTokens: compactionKeepRecentTokens } : {}),
       },
       thinkingBudgets: { ...PI_THINKING_BUDGETS },
