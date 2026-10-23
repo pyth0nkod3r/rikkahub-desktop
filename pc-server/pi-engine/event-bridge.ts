@@ -260,7 +260,11 @@ export function createPiEventBridge() {
       } else if (item.type === "text") {
         blocks.push({ type: "text", len: item.text.length });
       } else if (item.type === "toolCall") {
-        blocks.push({ type: "toolCall", toolCallId: item.id });
+        blocks.push({
+          type: "toolCall",
+          toolCallId: item.id,
+          ...(item.thoughtSignature ? { sig: item.thoughtSignature } : {}),
+        });
       }
     }
     return blocks;

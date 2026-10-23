@@ -84,7 +84,9 @@ export function defaultSettings(): Settings {
       // User-resizable chat input height in px (null = default min). Persisted across
       // restarts via displaySetting. PC-only — stripped before syncing to Android.
       chatInputHeight: null,
+      autoRetryCount: 3,
     },
+    autoRetryCount: 3,
     enableWebSearch: false,
     favoriteModels: [],
     chatModelId: DEFAULT_AUTO_MODEL_ID,

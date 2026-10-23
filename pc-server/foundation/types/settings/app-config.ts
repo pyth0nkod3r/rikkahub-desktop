@@ -10,6 +10,8 @@ export interface AppConfig {
    *  null = 从未选择过,新建取 balanced(默认权限)。 */
   workspaceLastPermissionPreset: string | null;
   keybindings: Record<string, JsonValue>;
+  /** 上游请求异常或限流时自动重试的最大次数(默认 3)。 */
+  autoRetryCount?: number;
   webServerJwtEnabled: boolean;
   /** PC-only:设置页内置访问密码的 HMAC 派生哈希(P1)。undefined/空 = 未设。
    *  永不存明文、不下发前端(仅经 webPasswordConfigured 布尔暴露);备份导出 to-android 剥离

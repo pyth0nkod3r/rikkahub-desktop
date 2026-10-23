@@ -173,12 +173,19 @@ export async function createPiSessionResources(options: {
    *  MANUAL_COMPACT_KEEP_RECENT_TOKENS(门槛/保留都调低,rationale 见 runner.ts 常量);
    *  不传 = pi 默认 20000(生成会话的 threshold/overflow 自动压缩用)。 */
   compactionKeepRecentTokens?: number;
+  maxRetries?: number;
 }): Promise<PiSessionResources> {
-  const { conversation, assistant, model, cwd, root, extraAppendSystemPrompt, compactionKeepRecentTokens } = options;
+  const { conversation, assistant, model, cwd, root, extraAppendSystemPrompt, compactionKeepRecentTokens, maxRetries } = options;
+  const configuredRetries =
+    typeof maxRetries === "number" && maxRetries >= 0
+      ? maxRetries
+      : typeof (assistant as any).autoRetryCount === "number" && (assistant as any).autoRetryCount >= 0
+        ? (assistant as any).autoRetryCount
+        : 3;
   // inMemory:零文件 I/O(不读不写任何 settings.json);projectTrusted:false 是给
   // resource-loader 的发现逻辑看的(.pi/SYSTEM.md 门控)。压缩面 P5 接管:threshold/
   // overflow 自动压缩显式开启(数值与 pi 默认一致,但不再依赖库默认值漂移),
-  // reserveTokens/keepRecentTokens 取 pi 默认;重试等其余会话行为仍取 pi 默认值。
+  // reserveTokens/keepRecentTokens 取 pi 默认。重试策略由配置决定(支持大于 3 次)。
   // thinkingBudgets:Google 2.x 预算通道与聊天引擎同数值(model-bridge 四键投影,方言单源)。
   const settingsManager = SettingsManager.inMemory(
     {
@@ -187,6 +194,13 @@ export async function createPiSessionResources(options: {
         ...(compactionKeepRecentTokens != null ? { keepRecentTokens: compactionKeepRecentTokens } : {}),
       },
       thinkingBudgets: { ...PI_THINKING_BUDGETS },
+      retry: {
+        enabled: configuredRetries > 0,
+        maxRetries: configuredRetries,
+        provider: {
+          maxRetries: configuredRetries,
+        },
+      },
     },
     { projectTrusted: false },
   );

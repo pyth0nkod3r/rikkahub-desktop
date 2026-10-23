@@ -277,11 +277,13 @@ function decodeWithFidelity(message: Message, fidelity: FidelityAnnotation): PiA
       } else if (block.type === "toolCall") {
         const toolPart = takeTool(block.toolCallId);
         if (!toolPart) return null;
+        const thoughtSignature = block.sig || (toolPart as any).thoughtSignature;
         content.push({
           type: "toolCall",
           id: toolPart.toolCallId,
           name: toolPart.toolName,
           arguments: parseToolArguments(toolPart.input),
+          ...(thoughtSignature ? { thoughtSignature } : {}),
         });
         toolParts.push(toolPart);
       } else {
@@ -343,11 +345,13 @@ function decodeLegacy(message: Message, fallbackModel: Model): PiAgentMessage[] 
     const content: AssistantMessage["content"] = [];
     for (const text of group.texts) content.push({ type: "text", text });
     for (const toolPart of group.toolParts) {
+      const thoughtSignature = (toolPart as any).thoughtSignature;
       content.push({
         type: "toolCall",
         id: toolPart.toolCallId,
         name: toolPart.toolName,
         arguments: parseToolArguments(toolPart.input),
+        ...(thoughtSignature ? { thoughtSignature } : {}),
       });
     }
     if (!content.length) continue;
@@ -471,10 +475,8 @@ export function seedPiSessionFromHistory(options: {
     .at(-1);
   if (applicable) {
     const cutEntryIds = entryIdsByMessageId.get(applicable.cutMessageId)!;
-    const summaryBoundary = syntheticIds.size
-      ? firstSeededEntryId
-      : cutEntryIds[0];
-    manager.appendCompaction(applicable.summary, summaryBoundary ?? cutEntryIds[0]!, applicable.tokensBefore);
+    const summaryBoundary = syntheticIds.size ? firstSeededEntryId : cutEntryIds[0];
+    manager.appendCompaction(applicable.summary, summaryBoundary, applicable.tokensBefore);
   }
 
   return { entryIdsByMessageId, degradedMessageIds };

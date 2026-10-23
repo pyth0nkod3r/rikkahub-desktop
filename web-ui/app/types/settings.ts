@@ -76,6 +76,8 @@ export interface DisplaySetting {
   colorTheme?: string;
   userThemes?: { id: string; name: string; css: { light: string; dark: string } }[];
   language?: string;
+  /** 上游请求异常或限流时自动重试的最大次数(默认 3)。 */
+  autoRetryCount?: number;
   [key: string]: unknown;
 }
 
@@ -137,6 +139,7 @@ export interface AssistantProfile {
   // 专题9:独立对话提示词注入(对齐安卓 Assistant.allowConversationPromptInjection)。
   // 开启后 modeInjectionIds/lorebookIds 的生效来源改为会话上的同名字段。
   allowConversationPromptInjection?: boolean;
+  autoRetryCount?: number | null;
   name: string;
   systemPrompt?: string;
   messageTemplate?: string;

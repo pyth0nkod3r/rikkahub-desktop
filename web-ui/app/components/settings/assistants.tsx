@@ -707,6 +707,25 @@ function AssistantEditor({
                   />
                 }
               />
+              <SettingsRow
+                label={t("settings:assistants.auto_retry_count", "自动重试次数")}
+                description={t("settings:assistants.auto_retry_count_desc", "上游请求异常或限流时自动重试的最大次数，留空跟随全局设置")}
+                control={
+                  <Input
+                    className="w-32 font-mono text-sm"
+                    type="number"
+                    min={0}
+                    max={50}
+                    aria-label={t("settings:assistants.auto_retry_count", "自动重试次数")}
+                    value={numberText(draft.autoRetryCount as number)}
+                    placeholder={t("settings:assistants.auto_retry_count_ph", "跟随全局 (3)")}
+                    onChange={(event) => {
+                      const raw = event.target.value.trim();
+                      patchDraft({ autoRetryCount: raw === "" ? null : Math.max(0, Number(raw) || 0) });
+                    }}
+                  />
+                }
+              />
             </SettingsRows>
             <SettingsField
               label={t("settings:assistants.context_message_size")}

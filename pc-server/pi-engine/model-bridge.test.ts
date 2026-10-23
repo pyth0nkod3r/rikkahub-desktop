@@ -242,6 +242,11 @@ describe("mapProviderModelToPi", () => {
     expect(hunyuan.compat?.thinkingFormat).toBeUndefined();
     expect(hunyuan.compat?.supportsReasoningEffort).toBeUndefined();
 
+    // 第三方中转站 DeepSeek 模型:压制 thinkingFormat 与 effort,防 OneAPI 400 Invalid request
+    const kiosapi = compatOf("https://api.kiosapi.com/v1", "deepseek-ai/DeepSeek-V4.1-Flash");
+    expect(kiosapi.compat?.thinkingFormat).toBe("none");
+    expect(kiosapi.compat?.supportsReasoningEffort).toBe(false);
+
     // NVIDIA:pi 白名单实证关 effort(值域特殊),尊重探测不覆盖。
     const nvidia = compatOf("https://integrate.api.nvidia.com/v1", "deepseek-ai/deepseek-v4");
     expect(nvidia.compat?.thinkingFormat).toBeUndefined();
@@ -254,6 +259,18 @@ describe("mapProviderModelToPi", () => {
     );
     if (!claude.ok) throw new Error(claude.reason);
     expect((claude.mapping.config.models?.[0]?.compat as any)?.thinkingFormat).toBeUndefined();
+  });
+
+  it("第三方中转站未显式配置 maxTokens 时钳位在 16384,防 OneAPI 超限 Invalid request", () => {
+    const relay = makeProvider({ id: "p1", name: "Kiosapi", baseUrl: "https://api.kiosapi.com/v1" });
+    const resClamped = mapProviderModelToPi(relay, model("deepseek-flash"), { maxTokens: 384_000 });
+    if (!resClamped.ok) throw new Error(resClamped.reason);
+    expect(resClamped.mapping.config.models?.[0]?.maxTokens).toBe(16_384);
+
+    // 用户显式配置时不钳位
+    const resExplicit = mapProviderModelToPi(relay, model("deepseek-flash"), { maxTokens: 384_000, explicitMaxTokens: true });
+    if (!resExplicit.ok) throw new Error(resExplicit.reason);
+    expect(resExplicit.mapping.config.models?.[0]?.maxTokens).toBe(384_000);
   });
 
   it("能力/模态位翻译:REASONING→reasoning,IMAGE→input 含 image", () => {

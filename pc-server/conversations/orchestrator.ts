@@ -732,9 +732,12 @@ async function runPostGenerationTasks(conversationId: string, snapshot: Conversa
  *  **同一个函数**,不是"同源口径"的口头约定。pi 的模型配置要求必须给出 maxTokens
  *  (它会恒发上限字段),所以这里同样属于"协议逼我给数"的场合。 */
 function piModelLimitsFor(provider: Provider, model: Model, assistant: Assistant) {
+  const modelContext = typeof model.contextLength === "number" && model.contextLength > 0 ? model.contextLength : null;
+  const contextWindow = modelContext ?? contextWindowFor(modelsDevCache, provider, model.modelId);
   return {
-    contextWindow: contextWindowFor(modelsDevCache, provider, model.modelId),
+    contextWindow,
     maxTokens: requiredOutputCap(modelsDevCache, provider, model.modelId, assistant.maxTokens),
+    explicitMaxTokens: typeof assistant.maxTokens === "number" && assistant.maxTokens > 0,
   };
 }
 
@@ -842,6 +845,14 @@ async function runPiWorkspaceGeneration(
   // 系统位注入(before/after_system_prompt)经 appendSystemPrompt 进 pi 系统面——
   // 与人设/记忆/搜索指引同一插槽,位置在 pi Guidelines 之后、project_context 之前。
   const systemInjection = [enriched.systemInjectionBefore, enriched.systemInjectionAfter].filter(Boolean).join("\n");
+  const configuredRetries =
+    typeof deps.assistant.autoRetryCount === "number" && deps.assistant.autoRetryCount >= 0
+      ? deps.assistant.autoRetryCount
+      : typeof (state.settings as any).autoRetryCount === "number" && (state.settings as any).autoRetryCount >= 0
+        ? (state.settings as any).autoRetryCount
+        : typeof (state.settings.displaySetting as any)?.autoRetryCount === "number" && (state.settings.displaySetting as any).autoRetryCount >= 0
+          ? (state.settings.displaySetting as any).autoRetryCount
+          : 3;
   const resources = await createPiSessionResources({
     conversation,
     assistant: deps.assistant,
@@ -849,6 +860,7 @@ async function runPiWorkspaceGeneration(
     cwd: runtime.cwd,
     root: runtime.root,
     extraAppendSystemPrompt: systemInjection ? [systemInjection] : undefined,
+    maxRetries: configuredRetries,
   });
 
   const result = await runPiGeneration({
@@ -941,6 +953,14 @@ async function runPiWorkspaceCompaction(
   });
   const history = encodableMessages(enriched.messages, enriched.syntheticIds);
   const systemInjection = [enriched.systemInjectionBefore, enriched.systemInjectionAfter].filter(Boolean).join("\n");
+  const configuredRetries =
+    typeof assistant.autoRetryCount === "number" && assistant.autoRetryCount >= 0
+      ? assistant.autoRetryCount
+      : typeof (state.settings as any).autoRetryCount === "number" && (state.settings as any).autoRetryCount >= 0
+        ? (state.settings as any).autoRetryCount
+        : typeof (state.settings.displaySetting as any)?.autoRetryCount === "number" && (state.settings.displaySetting as any).autoRetryCount >= 0
+          ? (state.settings.displaySetting as any).autoRetryCount
+          : 3;
   const resources = await createPiSessionResources({
     conversation,
     assistant,
@@ -950,6 +970,7 @@ async function runPiWorkspaceCompaction(
     extraAppendSystemPrompt: systemInjection ? [systemInjection] : undefined,
     // 手动压缩门槛/保留窗口调低(中文 chars/4 低估问题,rationale 见 runner.ts 常量)。
     compactionKeepRecentTokens: MANUAL_COMPACT_KEEP_RECENT_TOKENS,
+    maxRetries: configuredRetries,
   });
   // 摘要模型:公共压缩模型优先(ctx.summarizer,装配点已决策),pi 映射不进(自定义
   // 补全路径的 openai 型服务商等)则回退会话模型——公共设置是偏好不是硬约束,

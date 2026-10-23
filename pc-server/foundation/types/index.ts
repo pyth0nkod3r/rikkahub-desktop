@@ -187,6 +187,8 @@ export interface Assistant {
   /** 专题9:允许"会话级"绑定提示词注入/世界书(对齐安卓 Assistant.allowConversationPromptInjection)。
    *  开启后生效的注入 id 集来自 Conversation.modeInjectionIds/lorebookIds,完全取代助手级集合。 */
   allowConversationPromptInjection: boolean;
+  /** 上游响应异常或限流时的自动重试次数。null = 跟随全局设置。 */
+  autoRetryCount?: number | null;
 }
 
 /** 桌面端原生支持的 ASR 判别符。ASR 无注册表,这是「本端认识且能跑」的单源;

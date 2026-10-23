@@ -29,6 +29,7 @@ import {
   isArkSeed2Model,
   isDashScopeEffortQwenModel,
   isKimiK3Model,
+  isOfficialOpenAiHost,
   isSiliconFlowEffortModel,
   isZhipuEffortModel,
   isZhipuForcedThinkingModel,
@@ -324,6 +325,11 @@ function piThinkingOverridesFor(
     // K2.7-code(始终思考,开关拒收):压制全部思考字段,模型走默认行为。
     return { compat: { supportsReasoningEffort: false } };
   }
+  if (host !== "api.deepseek.com" && (/deepseek/i.test(model.modelId) || provider.name.toLowerCase().includes("deepseek"))) {
+    // 非官方中转/代理上的 DeepSeek 模型:既不认官方 thinking:{type} 对象,也不认 reasoning_effort;
+    // 显式压制以防 OneAPI/NewAPI 报 400 Invalid request。
+    return { compat: { thinkingFormat: "none" as any, supportsReasoningEffort: false } };
+  }
   // reasoning-effort 协议(官方/混元/阶跃/未知中转):字段与格式 pi 默认已对,但 pi 对
   // xhigh/max 两档默认不放行(getSupportedThinkingLevels 仅 thinkingLevelMap 显式登记
   // 才支持),MAX 档会被 clamp 到 high——与聊天引擎默认分支"档位原样透传(含 xhigh/max,
@@ -452,11 +458,19 @@ function createGeminiOAuthStreamSimple(providerItem: Provider) {
                     } else if (part.functionCall) {
                       const fc = part.functionCall;
                       const toolCallId = fc.id || `${fc.name}_${Date.now()}_${++toolCallCounter}`;
+                      const rawSig = (part as any).thoughtSignature || (part as any).thought_signature || (fc as any).thoughtSignature || (fc as any).thought_signature;
+                      const thoughtSignature =
+                        typeof rawSig === "string"
+                          ? rawSig
+                          : rawSig instanceof Uint8Array
+                            ? Buffer.from(rawSig).toString("base64")
+                            : undefined;
                       const toolCall = {
                         type: "toolCall" as const,
                         id: toolCallId,
                         name: String(fc.name || ""),
                         arguments: (fc.args as Record<string, any>) ?? {},
+                        ...(thoughtSignature ? { thoughtSignature } : {}),
                       };
                       blocks.push(toolCall);
                       stream.push({
@@ -623,13 +637,19 @@ export function mapProviderModelToPi(provider: Provider, model: Model, limits?: 
   const contextWindow =
     typeof limits?.contextWindow === "number" && limits.contextWindow > 0
       ? limits.contextWindow
-      : DEFAULT_CONTEXT_WINDOW;
+      : (typeof model.contextLength === "number" && model.contextLength > 0 ? model.contextLength : DEFAULT_CONTEXT_WINDOW);
   // 上限由调用方经 limits 注入(orchestrator 走 model-providers/model-limits 的
   // requiredOutputCap——与聊天引擎 Claude 分支同一个函数,已含"目录脏行剔除 + 收进窗口")。
   // 本模块不再二次钳制:那会让同一配置下两引擎发出不同的数(单源之外再加一层就是新的
   // 分歧源)。不传 limits 的路径(单测/冒烟)落方言兜底。
-  const maxTokens =
+  const rawMaxTokens =
     typeof limits?.maxTokens === "number" && limits.maxTokens > 0 ? limits.maxTokens : DEFAULT_OUTPUT_TOKENS;
+  const host = hostOfProvider(provider);
+  const isDeepSeekRelay = host !== "api.deepseek.com" && /deepseek/i.test(model.modelId);
+  const maxTokens =
+    isDeepSeekRelay && !limits?.explicitMaxTokens && rawMaxTokens > 16_384
+      ? 16_384
+      : rawMaxTokens;
 
   const config: ProviderConfigInput = {
     name: provider.name,

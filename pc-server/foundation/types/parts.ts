@@ -84,6 +84,7 @@ export type ToolPart = BaseMessagePart & {
   input: string;
   output: ToolOutputEntry[];
   approvalState: ToolApprovalState;
+  thoughtSignature?: string;
 };
 
 /** 生成首 token 前的占位符，收到真实增量后即被剥离；不落盘到历史。 */

@@ -169,6 +169,29 @@ export function AppSection({ settings }: PageProps) {
         </SettingsRows>
       </SettingsGroup>
 
+      <SettingsGroup
+        title={t("settings:general.retry_title", "自动重试")}
+        description={t("settings:general.retry_description", "上游响应异常或限流时自动重试的最大次数（默认 3 次，可按需调高）")}
+        fields
+      >
+        <SettingsField label={t("settings:general.auto_retry_count", "最大重试次数")}>
+          <div className="flex items-center gap-3">
+            <Input
+              type="number"
+              min={0}
+              max={50}
+              value={typeof display.autoRetryCount === "number" ? display.autoRetryCount : 3}
+              className="w-24 text-sm font-mono"
+              onChange={(e) => {
+                const val = Math.max(0, Math.min(50, Number(e.target.value) || 0));
+                patchDisplay({ autoRetryCount: val });
+              }}
+            />
+            <span className="text-muted-foreground text-xs">{t("settings:general.auto_retry_unit", "次")}</span>
+          </div>
+        </SettingsField>
+      </SettingsGroup>
+
       {isWindows && (
         <SettingsGroup
           title={t("settings:general.shell_title")}
