@@ -1,0 +1,27 @@
+name: Cleanup Workflow Runs
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # Run daily at midnight UTC
+  workflow_dispatch:
+
+permissions:
+  actions: write
+
+jobs:
+  prune-runs:
+    name: Prune Old Workflow Runs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Retain only the most recent 3 workflow runs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          echo "Checking workflow runs for $GH_REPO..."
+          RUNS=$(gh run list --repo "$GH_REPO" --limit 100 --json databaseId,createdAt --jq 'sort_by(.createdAt) | reverse | .[3:][].databaseId' || true)
+          for RUN_ID in $RUNS; do
+            echo "Deleting run $RUN_ID..."
+            gh run delete "$RUN_ID" --repo "$GH_REPO" || true
+          done
+          echo "Done: Enforced convention of keeping only the 3 most recent workflow runs."

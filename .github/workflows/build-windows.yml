@@ -15,6 +15,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   build-windows:
@@ -110,4 +111,17 @@ jobs:
           files: |
             web-ui/src-tauri/target/release/bundle/nsis/*.exe
             dist/*_portable.zip
+      - name: Retain only the 3 most recent workflow runs
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          echo "Pruning older workflow runs (convention: keep 3 most recent)..."
+          RUNS=$(gh run list --repo "$GH_REPO" --limit 100 --json databaseId,createdAt --jq 'sort_by(.createdAt) | reverse | .[3:][].databaseId' || true)
+          for RUN_ID in $RUNS; do
+            echo "Deleting run $RUN_ID..."
+            gh run delete "$RUN_ID" --repo "$GH_REPO" || true
+          done
 
