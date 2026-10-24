@@ -1,3 +1,5 @@
+import { useWorkspaceLayoutStore, getChatWidthClass } from "~/stores/workspace-layout-store";
+import { cn } from "~/lib/utils";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { FoldVertical, Loader2, ShieldAlert } from "lucide-react";
@@ -24,6 +26,8 @@ function useElapsedSeconds(startedAt: number | undefined): number | null {
 export function EngineStatusBar({ conversationId }: { conversationId: string | null }) {
   const { t } = useTranslation("page");
   const status = useConversationEngineStatus(conversationId);
+  const widthMode = useWorkspaceLayoutStore((s) => s.widthMode);
+  const widthClass = getChatWidthClass(widthMode);
   // 耗时计时的生效相:压缩(长任务)+ 域4-1 审批等待(用户离席回来要看等了多久)。
   // 重试相是短暂交替态,计时无意义。hook 须在条件返回之前调用。
   const elapsed = useElapsedSeconds(
@@ -86,7 +90,7 @@ export function EngineStatusBar({ conversationId }: { conversationId: string | n
   // Codex 式行内状态(内测拍板):左对齐、无边框背景、小图标+灰字,与消息列同宽对齐;
   // 压缩相用折叠图标+文字呼吸(pulse),重试相保留 spinner(旋转更贴"重试中"语义)。
   return (
-    <div className="mx-auto mb-2 flex w-full max-w-3xl items-center gap-2 px-4 text-muted-foreground text-xs">
+    <div className={cn("mx-auto mb-2 flex w-full items-center gap-2 px-4 text-muted-foreground text-xs transition-all duration-200", widthClass)}>
       {status.phase === "retrying" ? (
         <Loader2 className="size-3.5 shrink-0 animate-spin" />
       ) : status.phase === "awaiting_approval" ? (

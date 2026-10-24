@@ -1,3 +1,4 @@
+import { useWorkspaceLayoutStore, getChatWidthClass } from "~/stores/workspace-layout-store";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 
@@ -124,6 +125,8 @@ export const ConversationQuickJump = React.memo(function ConversationQuickJump({
   const canQuickJump = items.length > 1;
   const safeActiveIndex = Math.max(0, Math.min(activeIndex, items.length - 1));
   const listRef = React.useRef<HTMLDivElement>(null);
+  const widthMode = useWorkspaceLayoutStore((s) => s.widthMode);
+  const widthClass = getChatWidthClass(widthMode);
 
   // 单例悬停预览面板(替代逐行 Radix Tooltip):记录悬停行下标与锚点坐标,渲染一个
   // fixed 定位的浮层。视觉样式对齐 ui/tooltip.tsx 的 TooltipContent(去箭头)。
@@ -147,6 +150,9 @@ export const ConversationQuickJump = React.memo(function ConversationQuickJump({
   React.useEffect(() => {
     const list = listRef.current;
     if (!list) return;
+    const widthMode = useWorkspaceLayoutStore((s) => s.widthMode);
+    const widthClass = getChatWidthClass(widthMode);
+    const setSidecarTab = useWorkspaceLayoutStore((s) => s.setSidecarTab);
     const activeEl = list.querySelector<HTMLElement>(`[data-jump-index="${safeActiveIndex}"]`);
     if (!activeEl) return;
     const listRect = list.getBoundingClientRect();
@@ -171,7 +177,7 @@ export const ConversationQuickJump = React.memo(function ConversationQuickJump({
     // 显示:52rem 阈值 = 48rem 消息列 + 4rem 让位空间。窄于此(分栏/小窗)整条隐藏,
     // 而非压在正文上——判据取容器宽度(@container/timeline 由消息区声明),视口断点在
     // 分栏下判不出单个窗格的真实宽度。
-    <div className="pointer-events-none absolute inset-y-0 left-1/2 z-20 hidden w-full max-w-3xl -translate-x-1/2 @min-[52rem]/timeline:block">
+    <div className={cn("pointer-events-none absolute inset-y-0 left-1/2 z-20 hidden w-full -translate-x-1/2 @min-[52rem]/timeline:block transition-all duration-200", widthClass)}>
       <div className="pointer-events-auto absolute inset-y-4 -right-5 flex flex-col justify-center">
         <div
           ref={listRef}

@@ -1,3 +1,4 @@
+import { useWorkspaceLayoutStore, getChatWidthClass } from "~/stores/workspace-layout-store";
 import * as React from "react";
 
 import { ArrowUp, Download, File, FileDown, Image, LoaderCircle, Mic, PhoneCall, Plus, Scissors, Sparkles, Square, TriangleAlert, Undo2, Video, X, Zap } from "lucide-react";
@@ -779,12 +780,14 @@ function ChatInputInner({
     [canUpload, onAddParts, t],
   );
 
+  const widthMode = useWorkspaceLayoutStore((s) => s.widthMode);
+  const widthClass = getChatWidthClass(widthMode);
   const sendHint = sendOnEnter ? t("chat.send_hint_enter") : t("chat.send_hint_newline");
   const placeholder = ready ? t("chat.placeholder_ready") : t("chat.placeholder_not_ready");
 
   return (
     <div className={className}>
-      <div className="mx-auto w-full max-w-3xl px-4 py-4">
+      <div className={cn("mx-auto w-full px-4 py-4 transition-all duration-200", widthClass)}>
         {/* 可拖拽的上沿手柄：上下拖改变输入框高度（左右锁定）。对标微信等桌面聊天
             应用，让用户按需放大/收起输入区，尺寸跨会话与重启保留。 */}
         <div

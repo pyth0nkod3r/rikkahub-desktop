@@ -1,3 +1,6 @@
+import { useWorkspaceLayoutStore, getChatWidthClass } from "~/stores/workspace-layout-store";
+import { SidecarPanel } from "~/components/workspace/sidecar-panel";
+import { FloatingQuickDock } from "~/components/input/floating-quick-dock";
 import * as React from "react";
 
 import { useNavigate, useParams, useSearchParams } from "react-router";
@@ -742,6 +745,8 @@ const ConversationTimeline = React.memo(
     ) => Promise<void>;
   }) => {
     const { t } = useTranslation("page");
+    const widthMode = useWorkspaceLayoutStore((s) => s.widthMode);
+    const widthClass = getChatWidthClass(widthMode);
     // colocation(D 族支柱②):详情状态在消息面板本地订阅、本地派生 —— 流式增量
     // 只重渲染本子树,顶层(侧边栏/顶栏/输入区)不在传播路径上。切换会话时 store
     // 按 id 直读,缓存命中则首帧就是新会话完整内容(原 render 阶段换内容语义天然满足,
@@ -1227,7 +1232,8 @@ const ConversationTimeline = React.memo(
                 <div
                   id={getConversationMessageAnchorId(message.id)}
                   className={cn(
-                    "mx-auto w-full max-w-3xl px-4 py-2 scroll-mt-24",
+                    "mx-auto w-full px-4 py-2 scroll-mt-24 transition-all duration-200",
+                    widthClass,
                     contentClassName,
                     !knownMessageIds.has(message.id) && "rikkahub-animate-fade-in-up",
                   )}
@@ -2079,12 +2085,13 @@ const ConversationPaneView = React.memo(function ConversationPaneView({
         }
       />
 
-      <div
-        className={cn(
-          "flex flex-1 flex-col min-h-0 overflow-hidden",
-          isNewChat && "justify-center",
-        )}
-      >
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        <div
+          className={cn(
+            "flex flex-1 flex-col min-h-0 overflow-hidden",
+            isNewChat && "justify-center",
+          )}
+        >
         {!isNewChat && (
           <>
             {canOverrideConversationSystemPrompt && hasDetail ? (
@@ -2127,6 +2134,10 @@ const ConversationPaneView = React.memo(function ConversationPaneView({
           {voiceActive && activeId ? (
             <VoiceModeBanner onEnd={() => voiceMode.stop()} onRetry={handleToggleVoiceMode} />
           ) : null}
+          <FloatingQuickDock
+            conversationId={activeId}
+            onCompress={hasMessages ? handleCompressConversation : undefined}
+          />
           <ChatInputArea
             draftKey={draftKey}
             slashCommands={slashCommands}
@@ -2172,6 +2183,11 @@ const ConversationPaneView = React.memo(function ConversationPaneView({
             voiceModeActive={voiceActive}
           />
         </div>
+      </div>
+      <SidecarPanel
+          activeConversationId={activeId}
+          onCompressConversation={hasMessages ? handleCompressConversation : undefined}
+        />
       </div>
 
       {dropActive ? (

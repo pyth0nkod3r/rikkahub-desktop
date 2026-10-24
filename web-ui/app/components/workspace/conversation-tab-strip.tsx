@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
-import { Pencil, Plus, X } from "lucide-react";
+import { Bot, Pencil, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "~/components/ui/button";
@@ -184,7 +184,9 @@ export function ConversationTabStrip({
       <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none]">
       {tabs.map((conversationId, index) => {
         const active = conversationId === activeConversation;
-        const title = titleById.get(conversationId)?.trim() || t("workspace.tabs.untitled");
+        const rawTitle = titleById.get(conversationId)?.trim() || t("workspace.tabs.untitled");
+        const isSubagent = rawTitle.startsWith("[Sub-agent]");
+        const title = isSubagent ? rawTitle.replace(/^\[Sub-agent\]\s*/i, "").trim() : rawTitle;
         return (
           <ContextMenu key={conversationId}>
             <Tooltip delayDuration={800}>
@@ -227,6 +229,7 @@ export function ConversationTabStrip({
                     }}
                     onDragEnd={() => useTabDragStore.getState().setDragging(null)}
                   >
+                    {isSubagent ? <Bot className="size-3 text-primary shrink-0" /> : null}
                     <span className="min-w-0 flex-1 truncate">{title}</span>
                     <TabApprovalDot conversationId={conversationId} />
                     <span
@@ -280,6 +283,20 @@ export function ConversationTabStrip({
               >
                 {t("workspace.tabs.ctx_close_right")}
               </ContextMenuItem>
+              <ContextMenuItem
+                disabled={!tabs.some((id) => (titleById.get(id) ?? "").startsWith("[Sub-agent]"))}
+                onSelect={() => {
+                  tabs.forEach((id) => {
+                    const tit = titleById.get(id);
+                    if (tit && tit.startsWith("[Sub-agent]")) {
+                      useContainerTabsStore.getState().closeConversation(container, id);
+                    }
+                  });
+                  toast.success("Closed all subagent tabs");
+                }}
+              >
+                Close Subagent Tabs
+              </ContextMenuItem>
               <ContextMenuSeparator />
               <ContextMenuItem onSelect={() => handleCloseBatch("all", conversationId)}>
                 {t("workspace.tabs.ctx_close_all")}
@@ -288,6 +305,24 @@ export function ConversationTabStrip({
           </ContextMenu>
         );
       })}
+      {tabs.some((id) => (titleById.get(id) ?? "").startsWith("[Sub-agent]")) ? (
+        <button
+          type="button"
+          title="Close all subagent tabs"
+          onClick={() => {
+            tabs.forEach((id) => {
+              const tit = titleById.get(id);
+              if (tit && tit.startsWith("[Sub-agent]")) {
+                useContainerTabsStore.getState().closeConversation(container, id);
+              }
+            });
+            toast.success("Closed all subagent tabs");
+          }}
+          className="flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors duration-150 hover:bg-[var(--ds-on-surface)] hover:text-foreground"
+        >
+          <Bot className="size-3.5 opacity-60 hover:opacity-100" strokeWidth={1.75} />
+        </button>
+      ) : null}
       <button
         type="button"
         aria-label={t("workspace.tabs.new_conversation")}
