@@ -40,7 +40,7 @@ export interface ChatInputProps {
   onAddParts: (parts: UIMessagePart[]) => void;
   shouldDeleteFileOnRemove?: (part: UIMessagePart) => boolean;
   onRemovePart: (index: number, part: UIMessagePart) => Promise<void> | void;
-  onSend: () => Promise<void> | void;
+  onSend: (options?: { steerImmediately?: boolean }) => Promise<void> | void;
   onStop?: () => Promise<void> | void;
   onCancelEdit?: () => void;
   onSuggestionClick?: (suggestion: string) => void;
@@ -445,7 +445,7 @@ function ChatInputInner({
     }
   }, [canUpload]);
 
-  const handlePrimaryAction = React.useCallback(async () => {
+  const handlePrimaryAction = React.useCallback(async (options?: { steerImmediately?: boolean }) => {
     if (actionDisabled) {
       return;
     }
@@ -478,7 +478,7 @@ function ChatInputInner({
           return;
         }
         setOriginalBeforeOptimize(null);
-        await onSend();
+        await onSend(options);
         return;
       }
 
@@ -873,7 +873,7 @@ function ChatInputInner({
                       <button
                         type="button"
                         className="inline-flex min-w-0 max-w-[160px] items-center gap-1 cursor-zoom-in text-left hover:opacity-80 transition-opacity"
-                        onClick={() => {
+                        onClick={(e) => {
                           const resolved = resolveFileUrl(part.url);
                           const label = partLabel(part, t);
                           setPreviewImage({ url: resolved, name: label });
@@ -1143,8 +1143,9 @@ function ChatInputInner({
                           ? t("chat.parsing_send_blocked")
                           : undefined
                 }
-                onClick={() => {
-                  if (isGenerating || !isEmpty) void handlePrimaryAction();
+                onClick={(e) => {
+                  const isSteer = e.ctrlKey || e.metaKey;
+                  if (isGenerating || !isEmpty) void handlePrimaryAction({ steerImmediately: isSteer });
                   else toggleAsr();
                 }}
                 className={cn(

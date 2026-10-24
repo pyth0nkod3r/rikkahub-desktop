@@ -19,7 +19,7 @@
 // 数据面不变:服务端权威,经会话 SSE 快照直通;本地只持有编辑态。
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { CornerDownRight, Pause, Pencil, Play, Trash2, TriangleAlert } from "lucide-react";
+import { CornerDownRight, Pause, Pencil, Play, Trash2, TriangleAlert, Zap } from "lucide-react";
 import { toast } from "sonner";
 
 import api from "~/services/api";
@@ -191,6 +191,24 @@ export const MessageQueuePanel = React.memo(function MessageQueuePanel({
                   {/* 动作常态半透明可见(Codex 同款:排队项自带动作,不靠悬停发现)——
                       贴片本身已是独立一层,再把动作藏起来就没人知道能改/能撤。 */}
                   <div className="flex shrink-0 items-center gap-0.5 opacity-70 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() =>
+                            void run(() =>
+                              api.post(`conversations/${conversationId}/queue/${encodeURIComponent(item.id)}/send-now`),
+                            )
+                          }
+                          className="flex size-5 items-center justify-center rounded text-[var(--ds-icon)] transition-colors hover:bg-primary/10 hover:text-primary"
+                        >
+                          <Zap className="size-3" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>{t("queue.send_now")}</TooltipContent>
+                    </Tooltip>
+                    
                     {/* 附件项不支持编辑(快照只带文本 preview,编辑契约=替换正文);只能撤回。 */}
                     {!item.hasAttachments ? (
                       <Tooltip>

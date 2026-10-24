@@ -146,6 +146,7 @@
     "held_failed": "The last reply failed; queued messages are paused",
     "held_interrupted": "Generation stopped; queued messages were not sent",
     "resume": "Resume",
+    "send_now": "Send immediately (Steer now)",
     "edit": "Edit",
     "remove": "Discard",
     "save": "Save",

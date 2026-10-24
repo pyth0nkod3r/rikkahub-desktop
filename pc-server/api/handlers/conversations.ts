@@ -220,15 +220,19 @@ export async function handleConversationRoutes(request: Request, url: URL, path:
       // StartOrSteer(对齐 Codex start_or_steer_turn):占用与否由服务端裁决,前端永远只管
       // 提交。此前前端按 SSE 滞后的 isGenerating 选端点,快速连发时误判空闲走到这里,
       // 把自己刚点火的生成掐掉(2026-09-20 用户测试 1)。
+      const steerImmediately = Boolean(body.steerImmediately);
       if (generating.has(conversation.id)) {
-        // 生成中:入 FIFO(事实源:改/撤/序都作用于它)+ 推一份进 steering 通道——引擎在
-        // 下一个模型请求边界注入(对齐 Codex pending_input),编排层在同一时刻做数据层
-        // 分裂并把该项移出队列;引擎无边界可注入时它留在队列,收尾派发兜底,零丢失。
-        // 消息本体不落历史(注入/派发时才落),不中止在跑流。
-        const item = enqueueMessage(conversation.id, processedParts);
-        pushSteeringMessage(conversation.id, item.id, processedParts);
-        broadcastConversation(conversation);
-        return json({ status: "queued", queued: true, id: item.id }, { status: 202 });
+        if (steerImmediately) {
+          abortGeneration(conversation.id, "replaced");
+          generating.delete(conversation.id);
+          finishInterruptedPendingToolsInConversation(conversation);
+        } else {
+          // 生成中且未指定立即插话:入 FIFO 队列并在下一模型轮边界注入
+          const item = enqueueMessage(conversation.id, processedParts);
+          pushSteeringMessage(conversation.id, item.id, processedParts);
+          broadcastConversation(conversation);
+          return json({ status: "queued", queued: true, id: item.id }, { status: 202 });
+        }
       }
       // 空闲:落库用户消息并点火。上一条 ASSISTANT 若残留 pending 工具(聊天引擎审批
       // 暂停后用户直接发新消息)标记为"用户取消",历史回放时模型看到 denied 结果而非空
@@ -366,6 +370,47 @@ export async function handleConversationRoutes(request: Request, url: URL, path:
       // 恢复即尝试点火:若当前空闲,立即派发队首。
       if (!generating.has(conversation.id)) dispatchMessageQueue(conversation.id);
       return json({ status: "resumed" });
+    }
+    const queueSendNow = sub.match(/^queue\/([^/]+)\/send-now$/);
+    if (queueSendNow && request.method === "POST") {
+      const itemId = decodeURIComponent(queueSendNow[1]);
+      const item = removeQueuedMessage(conversation.id, itemId);
+      if (!item) return error("Queue item not found", 404);
+      removeSteeringMessage(conversation.id, itemId);
+
+      if (generating.has(conversation.id)) {
+        abortGeneration(conversation.id, "replaced");
+        generating.delete(conversation.id);
+        finishInterruptedPendingToolsInConversation(conversation);
+      }
+      releaseMessageQueueHold(conversation.id);
+
+      const assistant = findAssistant(conversation.assistantId);
+      const picked = findModel(assistant.chatModelId ?? state.settings.chatModelId);
+      const userMessage = message("USER", markOcrPendingParts(item.parts, picked.model));
+      userMessage.annotations.push({ type: "steered" });
+      bumpAnalyticsMsgCount();
+      const userNode = { id: id(), messages: [userMessage], selectIndex: 0 };
+      conversation.messages.push(userNode);
+      conversation.chatSuggestions = [];
+      conversation.updateAt = Date.now();
+      persistConversation(conversation);
+      broadcastConversation(conversation);
+
+      void (async () => {
+        checkoutConversation(conversation.id);
+        try {
+          userMessage.parts = await attachOcrToImageParts(userMessage.parts, picked.model);
+          if (getConversation(conversation.id) !== conversation) return;
+          persistConversation(conversation);
+          broadcastConversation(conversation);
+          await generateAnswer(conversation.id, assistant, picked);
+        } finally {
+          releaseConversation(conversation.id);
+        }
+      })();
+
+      return json({ status: "dispatched", id: itemId });
     }
     const queueItem = sub.match(/^queue\/([^/]+)$/);
     if (queueItem && request.method === "DELETE") {

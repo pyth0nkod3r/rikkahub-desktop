@@ -146,6 +146,7 @@
     "held_failed": "上一条回复失败，排队消息已暂停",
     "held_interrupted": "已停止生成，排队消息未发送",
     "resume": "继续发送",
+    "send_now": "立即发送（直接插话/中断）",
     "edit": "修改",
     "remove": "撤回",
     "save": "保存",

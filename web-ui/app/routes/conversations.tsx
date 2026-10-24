@@ -471,7 +471,7 @@ function useDraftInputController({
   const getSubmitParts = useChatInputStore((state) => state.getSubmitParts);
   const clearDraft = useChatInputStore((state) => state.clearDraft);
 
-  const handleSubmit = React.useCallback(async () => {
+  const handleSubmit = React.useCallback(async (options?: { steerImmediately?: boolean }) => {
     if (!draftKey) return;
 
     const parts = getSubmitParts(draftKey);
@@ -481,7 +481,7 @@ function useDraftInputController({
       // 单端点 StartOrSteer:占用与否由服务端裁决(空闲=落库点火;生成中=排队并在下一模型
       // 请求边界注入,不打断在跑生成)。前端不再按 SSE 滞后的 isGenerating 选端点——快速连发
       // 时那会误判空闲、掐掉自己刚点火的生成。
-      await api.post<{ status: string }>(`conversations/${activeId}/messages`, { parts });
+      await api.post<{ status: string }>(`conversations/${activeId}/messages`, { parts, steerImmediately: Boolean(options?.steerImmediately) });
       clearDraft(draftKey);
       return;
     }
@@ -1675,7 +1675,7 @@ const ConversationPaneView = React.memo(function ConversationPaneView({
     [activeId, draftKey, editingSession, endEdit, setDraftText],
   );
 
-  const handleSend = React.useCallback(async () => {
+  const handleSend = React.useCallback(async (options?: { steerImmediately?: boolean }) => {
     // 域9-1(3B)防御层:发送门禁主判定在 chat-input(按钮灰+发送键短路),这里再兜一层
     // ——编辑会话/快捷键/程序化触发等绕开按钮的路径,也不会把"解析中"的附件发出去。
     const draftPartsForGate = getCurrentSubmitParts();
