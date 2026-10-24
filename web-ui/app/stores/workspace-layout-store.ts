@@ -40,7 +40,7 @@ function getInitialSidecarOpen(): boolean {
   if (typeof window === "undefined") return false;
   const stored = localStorage.getItem(STORAGE_SIDECAR_KEY);
   if (stored !== null) return stored === "true";
-  return window.innerWidth >= 1280;
+  return false;
 }
 
 function getInitialTab(): SidecarTab {

@@ -5,27 +5,21 @@ import {
   Bot,
   ChevronRight,
   Cpu,
-  FileCode,
   FileDiff,
   FolderGit2,
-  HardDrive,
   PanelRightClose,
   RefreshCw,
   Sparkles,
   Trash2,
   X,
-  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { cn } from "~/lib/utils";
 import api from "~/services/api";
-import { useWorkspaceLayoutStore, type SidecarTab } from "~/stores/workspace-layout-store";
+import { useWorkspaceLayoutStore } from "~/stores/workspace-layout-store";
 import { useConversationStore } from "~/stores/conversation-store";
-import { useWorkspaceStore } from "~/stores/workspace-store";
-import { useContainerTabsStore } from "~/stores/container-tabs-store";
-import { useCurrentAssistant } from "~/hooks/use-current-assistant";
-import { useConversationList } from "~/hooks/use-conversation-list";
+import { useContainerTabsStore, type ContainerKey } from "~/stores/container-tabs-store";
 import type { ConversationListDto } from "~/types";
 import { WorkspaceFilesPanel } from "~/components/workbench/workspace-files-panel";
 import { DiffView } from "~/components/workspace/diff-view";
@@ -33,13 +27,21 @@ import { Button } from "~/components/ui/button";
 
 interface SidecarPanelProps {
   activeConversationId: string | null;
+  conversations?: ConversationListDto[];
+  container?: ContainerKey;
+  activeWorkspaceId?: string;
   onCompressConversation?: () => void;
+  onRefreshList?: () => void;
   className?: string;
 }
 
 export function SidecarPanel({
   activeConversationId,
+  conversations = [],
+  container = "chat",
+  activeWorkspaceId,
   onCompressConversation,
+  onRefreshList,
   className,
 }: SidecarPanelProps) {
   const { t } = useTranslation();
@@ -52,17 +54,13 @@ export function SidecarPanel({
   const setSidecarOpen = useWorkspaceLayoutStore((s) => s.setSidecarOpen);
   const closeDiff = useWorkspaceLayoutStore((s) => s.closeDiff);
 
-  const workspaces = useWorkspaceStore((s) => s.workspaces);
-  const activeWorkspace = workspaces[0];
-
-  const { currentAssistantId } = useCurrentAssistant();
-  const { conversations, refreshList } = useConversationList({ currentAssistantId, autoSelectFirst: false });
-
   // Filter subagents from all conversations
   const subagents = React.useMemo(() => {
+    if (!Array.isArray(conversations)) return [];
     return conversations.filter(
       (c: ConversationListDto) =>
-        c.title &&
+        c &&
+        typeof c.title === "string" &&
         (c.title.startsWith("[Sub-agent]") ||
           c.title.toLowerCase().includes("sub-agent") ||
           c.title.toLowerCase().includes("subagent")),
@@ -72,11 +70,25 @@ export function SidecarPanel({
   const handleDeleteSubagent = async (subagentId: string) => {
     try {
       await api.delete(`conversations/${subagentId}`);
-      void refreshList();
+      onRefreshList?.();
       toast.success("Subagent deleted");
     } catch {
       toast.error("Failed to delete subagent");
     }
+  };
+
+  const handleClearSubagentTabs = () => {
+    const tabsStore = useContainerTabsStore.getState();
+    const panes = tabsStore.panes[container] ?? [];
+    panes.forEach((pane) => {
+      pane.tabs.forEach((tabId) => {
+        const conv = conversations.find((c) => c.id === tabId);
+        if (conv?.title && conv.title.startsWith("[Sub-agent]")) {
+          tabsStore.closeConversation(container, tabId);
+        }
+      });
+    });
+    toast.success("Subagent tabs cleared from top bar");
   };
 
   // Active conversation stats for Tokens & Context tab
@@ -95,7 +107,10 @@ export function SidecarPanel({
     let turns = 0;
 
     for (const node of nodes) {
-      const msg = node.messages[node.selectIndex] ?? node.messages[0];
+      const msgs = node?.messages;
+      if (!Array.isArray(msgs) || msgs.length === 0) continue;
+      const selectIdx = typeof node.selectIndex === "number" ? node.selectIndex : 0;
+      const msg = msgs[selectIdx] ?? msgs[0];
       if (!msg) continue;
       turns++;
       const usage = msg.usage as Record<string, unknown> | null | undefined;
@@ -219,10 +234,7 @@ export function SidecarPanel({
               {subagents.length > 0 && (
                 <button
                   type="button"
-                  onClick={() => {
-                    useContainerTabsStore.getState().closeConversationsBatch("default", "all", "");
-                    toast.success("Subagent tabs cleared from top bar");
-                  }}
+                  onClick={handleClearSubagentTabs}
                   className="text-primary hover:underline text-[11px]"
                 >
                   Clear from tabs
@@ -242,7 +254,7 @@ export function SidecarPanel({
               <div className="space-y-2">
                 {subagents.map((sub: ConversationListDto) => {
                   const isCurrent = sub.id === activeConversationId;
-                  const displayTitle = sub.title.replace(/^\[Sub-agent\]\s*/i, "").trim();
+                  const displayTitle = (sub.title || "").replace(/^\[Sub-agent\]\s*/i, "").trim();
 
                   return (
                     <div
@@ -278,7 +290,7 @@ export function SidecarPanel({
                       </div>
 
                       <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-                        <span>{new Date(sub.createAt).toLocaleTimeString()}</span>
+                        <span>{sub.createAt ? new Date(sub.createAt).toLocaleTimeString() : ""}</span>
                         <span className="flex items-center gap-0.5 text-primary">
                           Open <ChevronRight className="size-3" />
                         </span>
@@ -293,8 +305,8 @@ export function SidecarPanel({
 
         {sidecarTab === "files" && (
           <div className="h-full">
-            {activeWorkspace ? (
-              <WorkspaceFilesPanel workspaceId={activeWorkspace.id} />
+            {activeWorkspaceId ? (
+              <WorkspaceFilesPanel workspaceId={activeWorkspaceId} />
             ) : (
               <div className="p-6 text-center text-xs text-muted-foreground space-y-2">
                 <FolderGit2 className="mx-auto size-8 opacity-40" />

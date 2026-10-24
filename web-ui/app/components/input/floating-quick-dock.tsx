@@ -12,19 +12,19 @@ import {
 import { cn } from "~/lib/utils";
 import { useConversationStore } from "~/stores/conversation-store";
 import { useWorkspaceLayoutStore } from "~/stores/workspace-layout-store";
-import { useCurrentAssistant } from "~/hooks/use-current-assistant";
-import { useConversationList } from "~/hooks/use-conversation-list";
 import type { ConversationListDto } from "~/types";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/tooltip";
 
 interface FloatingQuickDockProps {
   conversationId: string | null;
+  conversations?: ConversationListDto[];
   onCompress?: () => void;
   className?: string;
 }
 
 export function FloatingQuickDock({
   conversationId,
+  conversations = [],
   onCompress,
   className,
 }: FloatingQuickDockProps) {
@@ -36,12 +36,12 @@ export function FloatingQuickDock({
   const toggleSidecar = useWorkspaceLayoutStore((s) => s.toggleSidecar);
   const setSidecarTab = useWorkspaceLayoutStore((s) => s.setSidecarTab);
 
-  const { currentAssistantId } = useCurrentAssistant();
-  const { conversations } = useConversationList({ currentAssistantId, autoSelectFirst: false });
   const subagents = React.useMemo(() => {
+    if (!Array.isArray(conversations)) return [];
     return conversations.filter(
       (c: ConversationListDto) =>
-        c.title &&
+        c &&
+        typeof c.title === "string" &&
         (c.title.startsWith("[Sub-agent]") ||
           c.title.toLowerCase().includes("sub-agent") ||
           c.title.toLowerCase().includes("subagent")),
@@ -57,7 +57,10 @@ export function FloatingQuickDock({
     let promptTotal = 0;
     let completionTotal = 0;
     for (const node of nodes) {
-      const msg = node.messages[node.selectIndex] ?? node.messages[0];
+      const msgs = node?.messages;
+      if (!Array.isArray(msgs) || msgs.length === 0) continue;
+      const selectIdx = typeof node.selectIndex === "number" ? node.selectIndex : 0;
+      const msg = msgs[selectIdx] ?? msgs[0];
       if (!msg) continue;
       const usage = msg.usage as Record<string, unknown> | null | undefined;
       if (!usage || typeof usage !== "object") continue;

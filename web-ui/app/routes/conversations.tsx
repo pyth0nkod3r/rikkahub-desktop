@@ -2136,6 +2136,7 @@ const ConversationPaneView = React.memo(function ConversationPaneView({
           ) : null}
           <FloatingQuickDock
             conversationId={activeId}
+            conversations={conversations}
             onCompress={hasMessages ? handleCompressConversation : undefined}
           />
           <ChatInputArea
@@ -2186,7 +2187,11 @@ const ConversationPaneView = React.memo(function ConversationPaneView({
       </div>
       <SidecarPanel
           activeConversationId={activeId}
+          conversations={conversations}
+          container={container}
+          activeWorkspaceId={activeWorkspace?.id}
           onCompressConversation={hasMessages ? handleCompressConversation : undefined}
+          onRefreshList={refreshList}
         />
       </div>
 
