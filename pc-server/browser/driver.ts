@@ -120,7 +120,7 @@ export class BrowserDriver {
     return this.currentUrl;
   }
 
-  async ensureBrowser(): Promise<void> {
+  async ensureBrowser(retryCount = 0): Promise<void> {
     if (this.session && this.process) return;
 
     const exe = findBrowserExecutable();
@@ -128,7 +128,8 @@ export class BrowserDriver {
       throw new Error("No Chromium-based browser (Microsoft Edge or Google Chrome) found on host.");
     }
 
-    const profileDir = join(dataDir, "browser-profile");
+    const baseProfileDir = join(dataDir, "browser-profile");
+    const profileDir = retryCount > 0 ? join(baseProfileDir, `isolated-${Date.now()}`) : baseProfileDir;
     if (!existsSync(profileDir)) {
       mkdirSync(profileDir, { recursive: true });
     } else {
@@ -166,15 +167,23 @@ export class BrowserDriver {
     this.process = spawn({
       cmd: args,
       stdout: "ignore",
-      stderr: "ignore",
+      stderr: "pipe",
     });
 
     // Wait for CDP endpoint to be ready
     let targetWsUrl: string | null = null;
+    let prematureExitCode: number | null = null;
+    let stderrOutput = "";
+
     for (let i = 0; i < 100; i++) {
       if (this.process && this.process.exitCode !== null) {
-        this.close();
-        throw new Error(`Headless browser process exited prematurely with code ${this.process.exitCode}.`);
+        prematureExitCode = this.process.exitCode;
+        try {
+          if (this.process.stderr) {
+            stderrOutput = await new Response(this.process.stderr).text();
+          }
+        } catch {}
+        break;
       }
       await new Promise((r) => setTimeout(r, 200));
       try {
@@ -189,8 +198,19 @@ export class BrowserDriver {
       }
     }
 
+    if (prematureExitCode !== null) {
+      this.close();
+      if (retryCount === 0) {
+        return this.ensureBrowser(1);
+      }
+      throw new Error(`Headless browser process exited prematurely with code ${prematureExitCode}.${stderrOutput ? ` Details: ${stderrOutput.slice(0, 300)}` : ""}`);
+    }
+
     if (!targetWsUrl) {
       this.close();
+      if (retryCount === 0) {
+        return this.ensureBrowser(1);
+      }
       throw new Error("Failed to connect to headless browser CDP within 20 seconds.");
     }
 
@@ -387,10 +407,19 @@ export class BrowserDriver {
       this.session = null;
     }
     if (this.process) {
+      const pid = this.process.pid;
       try {
-        this.process.kill();
+        if (process.platform === "win32" && pid) {
+          Bun.spawnSync(["taskkill", "/F", "/T", "/PID", String(pid)]);
+        } else {
+          this.process.kill();
+        }
       } catch {
-        // Ignore
+        try {
+          this.process.kill();
+        } catch {
+          // Ignore
+        }
       }
       this.process = null;
     }
