@@ -273,7 +273,7 @@ describe("mapProviderModelToPi", () => {
     expect(resExplicit.mapping.config.models?.[0]?.maxTokens).toBe(384_000);
   });
 
-  it("未配置 contextLength 时按模型族系推断 fallback 窗口,防大窗口模型被 128k 误判静默溢出", () => {
+  it("未配置 contextLength 时默认采用 1M+ 窗口,识别 2M/4M 与小窗口后缀,防任意模型被过早自动压缩", () => {
     const relay = makeProvider({ id: "p1", name: "Kiosapi", baseUrl: "https://api.kiosapi.com/v1" });
     const dsFlash = mapProviderModelToPi(relay, model("deepseek-v4.1-flash-free"));
     if (!dsFlash.ok) throw new Error(dsFlash.reason);
@@ -283,13 +283,17 @@ describe("mapProviderModelToPi", () => {
     if (!glm.ok) throw new Error(glm.reason);
     expect(glm.mapping.config.models?.[0]?.contextWindow).toBe(1_048_576);
 
-    const kimi = mapProviderModelToPi(relay, model("kimi-k3-preview"));
-    if (!kimi.ok) throw new Error(kimi.reason);
-    expect(kimi.mapping.config.models?.[0]?.contextWindow).toBe(200_000);
+    const openWeight = mapProviderModelToPi(relay, model("llama-3.3-70b-instruct"));
+    if (!openWeight.ok) throw new Error(openWeight.reason);
+    expect(openWeight.mapping.config.models?.[0]?.contextWindow).toBe(1_048_576);
 
-    const generic = mapProviderModelToPi(relay, model("custom-tiny-model"));
-    if (!generic.ok) throw new Error(generic.reason);
-    expect(generic.mapping.config.models?.[0]?.contextWindow).toBe(128_000);
+    const twoMillion = mapProviderModelToPi(relay, model("custom-model-2m"));
+    if (!twoMillion.ok) throw new Error(twoMillion.reason);
+    expect(twoMillion.mapping.config.models?.[0]?.contextWindow).toBe(2_097_152);
+
+    const smallExplicit = mapProviderModelToPi(relay, model("legacy-128k-model"));
+    if (!smallExplicit.ok) throw new Error(smallExplicit.reason);
+    expect(smallExplicit.mapping.config.models?.[0]?.contextWindow).toBe(128_000);
   });
 
   it("能力/模态位翻译:REASONING→reasoning,IMAGE→input 含 image", () => {

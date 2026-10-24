@@ -80,14 +80,20 @@ const ZERO_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 // 我们的模型配置不含上下文窗口/输出上限（安卓同构无此字段）。P5：调用方经 limits 传
 // models.dev 真实值（影响 pi 自动压缩阈值 contextWindow-reserveTokens 与请求 max_tokens），
 // 查不到时用保守通用默认——128k 窗口宁可让大窗口模型早压缩，也不给小窗口模型虚报。
-const DEFAULT_CONTEXT_WINDOW = 128_000;
+export const DEFAULT_CONTEXT_WINDOW = 1_048_576;
 
-/** 当目录与用户配置均未指定上下文窗口时,按模型名族系做合理推断,防大窗口模型被 128k 误判静默溢出。 */
+/** 当目录与用户配置均未指定上下文窗口时,按模型标识做合理推断,默认采用 1M+ 窗口，避免任何未登记/开源大模型被过早自动压缩。 */
 export function inferContextWindowFallback(modelId: string): number {
   const lower = modelId.toLowerCase();
-  if (/gemini|glm|qwen/i.test(lower)) return 1_048_576;
-  if (/deepseek/i.test(lower)) return /flash/i.test(lower) ? 1_048_576 : 128_000;
-  if (/kimi|moonshot|claude/i.test(lower)) return 200_000;
+  if (/(\b|[-_])4m(\b|[-_])/i.test(lower)) return 4_194_304;
+  if (/(\b|[-_])2m(\b|[-_])/i.test(lower)) return 2_097_152;
+  // 仅对明确带小窗口后缀标识的模型做下调
+  if (/(\b|[-_])32k(\b|[-_])/i.test(lower)) return 32_768;
+  if (/(\b|[-_])64k(\b|[-_])/i.test(lower)) return 65_536;
+  if (/(\b|[-_])128k(\b|[-_])/i.test(lower)) return 128_000;
+  if (/(\b|[-_])200k(\b|[-_])/i.test(lower)) return 200_000;
+  if (/(\b|[-_])256k(\b|[-_])/i.test(lower)) return 262_144;
+  if (/(\b|[-_])512k(\b|[-_])/i.test(lower)) return 524_288;
   return DEFAULT_CONTEXT_WINDOW;
 }
 // 输出上限兜底与聊天引擎同源(DEFAULT_OUTPUT_TOKENS,方言单源)。注意 pi 的

@@ -191,7 +191,7 @@ export async function createPiSessionResources(options: {
   const settingsManager = SettingsManager.inMemory(
     {
       compaction: {
-        enabled: true,
+        enabled: (assistant as any).autoCompaction !== false,
         reserveTokens: 32_768,
         ...(compactionKeepRecentTokens != null ? { keepRecentTokens: compactionKeepRecentTokens } : {}),
       },
