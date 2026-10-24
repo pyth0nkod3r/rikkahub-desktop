@@ -150,9 +150,6 @@ export const ConversationQuickJump = React.memo(function ConversationQuickJump({
   React.useEffect(() => {
     const list = listRef.current;
     if (!list) return;
-    const widthMode = useWorkspaceLayoutStore((s) => s.widthMode);
-    const widthClass = getChatWidthClass(widthMode);
-    const setSidecarTab = useWorkspaceLayoutStore((s) => s.setSidecarTab);
     const activeEl = list.querySelector<HTMLElement>(`[data-jump-index="${safeActiveIndex}"]`);
     if (!activeEl) return;
     const listRect = list.getBoundingClientRect();
