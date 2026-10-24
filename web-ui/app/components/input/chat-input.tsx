@@ -895,30 +895,27 @@ function ChatInputInner({
                     )}
                     <ExtractionBadge part={part} />
                     <button
-                      className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                      className="flex size-4 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                       onClick={async (e) => {
+                        e.preventDefault();
                         e.stopPropagation();
-                        if (!ready || disabled || isGenerating || submitting) return;
+                        if (!ready || disabled || submitting) return;
 
                         const fileId = getPartFileId(part);
                         if (fileId != null && (shouldDeleteFileOnRemove?.(part) ?? true)) {
                           try {
                             await api.delete<{ status: string }>(`files/${fileId}`);
                           } catch (deleteError) {
-                            const message =
-                              deleteError instanceof Error
-                                ? deleteError.message
-                                : t("chat.delete_attachment_failed");
-                            setError(message);
-                            return;
+                            console.warn("Failed to delete attachment file from server:", deleteError);
                           }
                         }
 
                         await onRemovePart(index, part);
                       }}
                       type="button"
+                      title={t("chat.remove_attachment", { defaultValue: "Remove" })}
                     >
-                      <X className="size-3" />
+                      <X className="size-3.5" />
                     </button>
                   </div>
                 );
