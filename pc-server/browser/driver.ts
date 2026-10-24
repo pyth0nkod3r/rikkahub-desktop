@@ -1,5 +1,5 @@
 import { spawn, type Subprocess } from "bun";
-import { existsSync, mkdirSync, unlinkSync } from "node:fs";
+import { existsSync, mkdirSync, unlinkSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { dataDir, filesDir } from "../foundation/paths";
 import { state, saveState } from "../persistence/json-store";
@@ -112,7 +112,9 @@ export class CdpSession {
 
 export class BrowserDriver {
   private process: Subprocess | null = null;
-  private port = 9222;
+  private port = 0;
+  private browserWsUrl: string | null = null;
+  private activeProfileDir: string | null = null;
   private session: CdpSession | null = null;
   private currentUrl = "about:blank";
 
@@ -130,11 +132,13 @@ export class BrowserDriver {
 
     const baseProfileDir = join(dataDir, "browser-profile");
     const profileDir = retryCount > 0 ? join(baseProfileDir, `isolated-${Date.now()}`) : baseProfileDir;
+    this.activeProfileDir = profileDir;
+
     if (!existsSync(profileDir)) {
       mkdirSync(profileDir, { recursive: true });
     } else {
-      // Remove stale Chromium lockfiles that cause startup failures
-      for (const lock of ["lockfile", "SingletonLock", "SingletonCookie", "SingletonSocket"]) {
+      // Remove stale Chromium lockfiles and old active port file
+      for (const lock of ["DevToolsActivePort", "lockfile", "SingletonLock", "SingletonCookie", "SingletonSocket"]) {
         try {
           const p = join(profileDir, lock);
           if (existsSync(p)) unlinkSync(p);
@@ -144,12 +148,11 @@ export class BrowserDriver {
       }
     }
 
-    // Pick random port between 9300-9800 to prevent collisions
-    this.port = 9300 + Math.floor(Math.random() * 500);
+    const activePortFile = join(profileDir, "DevToolsActivePort");
 
     const args = [
       exe,
-      `--remote-debugging-port=${this.port}`,
+      "--remote-debugging-port=0",
       "--remote-debugging-address=127.0.0.1",
       "--remote-allow-origins=*",
       `--user-data-dir=${profileDir}`,
@@ -159,6 +162,8 @@ export class BrowserDriver {
       "--disable-dev-shm-usage",
       "--no-first-run",
       "--no-default-browser-check",
+      "--no-service-autorun",
+      "--disable-features=msEdgeStartupBoost,OptimizationHints",
       "--disable-background-networking",
       "--disable-sync",
       "about:blank",
@@ -170,7 +175,7 @@ export class BrowserDriver {
       stderr: "pipe",
     });
 
-    // Wait for CDP endpoint to be ready
+    // Wait for CDP endpoint to be ready via DevToolsActivePort
     let targetWsUrl: string | null = null;
     let prematureExitCode: number | null = null;
     let stderrOutput = "";
@@ -185,17 +190,20 @@ export class BrowserDriver {
         } catch {}
         break;
       }
-      await new Promise((r) => setTimeout(r, 200));
-      try {
-        const resp = await fetch(`http://127.0.0.1:${this.port}/json/version`);
-        if (resp.ok) {
-          const json = await resp.json();
-          targetWsUrl = json.webSocketDebuggerUrl;
-          break;
+      if (existsSync(activePortFile)) {
+        try {
+          const lines = readFileSync(activePortFile, "utf8").trim().split("\n");
+          if (lines.length >= 2 && Number(lines[0].trim()) > 0) {
+            this.port = Number(lines[0].trim());
+            const wsPath = lines[1].trim();
+            targetWsUrl = `ws://127.0.0.1:${this.port}${wsPath.startsWith("/") ? "" : "/"}${wsPath}`;
+            break;
+          }
+        } catch {
+          // DevToolsActivePort is still being written
         }
-      } catch {
-        // Retry
       }
+      await new Promise((r) => setTimeout(r, 150));
     }
 
     if (prematureExitCode !== null) {
@@ -211,14 +219,23 @@ export class BrowserDriver {
       if (retryCount === 0) {
         return this.ensureBrowser(1);
       }
-      throw new Error("Failed to connect to headless browser CDP within 20 seconds.");
+      throw new Error("Failed to connect to headless browser CDP within 15 seconds.");
     }
 
+    this.browserWsUrl = targetWsUrl;
+
     // Get active page target
-    const pagesResp = await fetch(`http://127.0.0.1:${this.port}/json/list`);
-    const pages = await pagesResp.json();
-    const pageTarget = pages.find((p: any) => p.type === "page") || pages[0];
-    const pageWsUrl = pageTarget?.webSocketDebuggerUrl || targetWsUrl;
+    let pageWsUrl = targetWsUrl;
+    try {
+      const pagesResp = await fetch(`http://127.0.0.1:${this.port}/json/list`);
+      if (pagesResp.ok) {
+        const pages = await pagesResp.json();
+        const pageTarget = pages.find((p: any) => p.type === "page") || pages[0];
+        if (pageTarget?.webSocketDebuggerUrl) {
+          pageWsUrl = pageTarget.webSocketDebuggerUrl;
+        }
+      }
+    } catch {}
 
     this.session = new CdpSession(pageWsUrl);
     await this.session.connect();
@@ -226,7 +243,6 @@ export class BrowserDriver {
     await this.session.send("Runtime.enable");
     await this.session.send("DOM.enable");
   }
-
   async open(url: string): Promise<{ url: string; title: string }> {
     await this.ensureBrowser();
     let target = url.trim();
@@ -402,6 +418,17 @@ export class BrowserDriver {
   }
 
   close(): void {
+    if (this.browserWsUrl) {
+      try {
+        const ws = new WebSocket(this.browserWsUrl);
+        ws.onopen = () => {
+          try {
+            ws.send(JSON.stringify({ id: 9999, method: "Browser.close" }));
+          } catch {}
+        };
+      } catch {}
+      this.browserWsUrl = null;
+    }
     if (this.session) {
       this.session.close();
       this.session = null;
@@ -422,6 +449,13 @@ export class BrowserDriver {
         }
       }
       this.process = null;
+    }
+    if (this.activeProfileDir) {
+      try {
+        const activePortFile = join(this.activeProfileDir, "DevToolsActivePort");
+        if (existsSync(activePortFile)) unlinkSync(activePortFile);
+      } catch {}
+      this.activeProfileDir = null;
     }
   }
 }
