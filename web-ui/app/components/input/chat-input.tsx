@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { ArrowUp, File, FileDown, Image, LoaderCircle, Mic, PhoneCall, Plus, Scissors, Sparkles, Square, TriangleAlert, Undo2, Video, X, Zap } from "lucide-react";
+import { ArrowUp, Download, File, FileDown, Image, LoaderCircle, Mic, PhoneCall, Plus, Scissors, Sparkles, Square, TriangleAlert, Undo2, Video, X, Zap } from "lucide-react";
 import { startMicCapture } from "~/lib/voice/mic-capture";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -18,6 +18,7 @@ import { useSlashCommand } from "~/hooks/use-slash-command";
 import { parseSlashCommand, type SlashCommandDto } from "~/lib/slash-commands";
 import { useChatInputStore, useSettingsStore } from "~/stores";
 import { Button } from "~/components/ui/button";
+import { Dialog, DialogContent, DialogTitle } from "~/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "~/components/ui/dropdown-menu";
 import { Textarea } from "~/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/tooltip";
@@ -242,6 +243,24 @@ function ExtractionBadge({ part }: { part: UIMessagePart }) {
   return null;
 }
 
+async function downloadAttachmentImage(url: string, name?: string) {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Download failed: ${response.status}`);
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = name || `rikkahub-preview-${Date.now()}`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : "Failed to download image");
+  }
+}
+
 function ChatInputInner({
   value,
   attachments,
@@ -346,6 +365,7 @@ function ChatInputInner({
   const uploadProgress = useChatInputStore((state) => state.uploadProgress);
   const [uploadMenuOpen, setUploadMenuOpen] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [previewImage, setPreviewImage] = React.useState<{ url: string; name: string } | null>(null);
   const [asrListening, setAsrListening] = React.useState(false);
   const asrSocketRef = React.useRef<WebSocket | null>(null);
   // 麦克风采集由共享 mic-capture 承担(与语音模式同一实现),这里只持有其清理句柄。
@@ -850,19 +870,34 @@ function ChatInputInner({
                     className="group inline-flex max-w-[220px] items-center gap-1 rounded-full border bg-background/80 px-2 py-1 text-xs"
                   >
                     {part.type === "image" ? (
-                      <img
-                        alt="upload"
-                        className="size-5 rounded object-cover"
-                        src={resolveFileUrl(part.url)}
-                      />
+                      <button
+                        type="button"
+                        className="inline-flex min-w-0 max-w-[160px] items-center gap-1 cursor-zoom-in text-left hover:opacity-80 transition-opacity"
+                        onClick={() => {
+                          const resolved = resolveFileUrl(part.url);
+                          const label = partLabel(part, t);
+                          setPreviewImage({ url: resolved, name: label });
+                        }}
+                        title={t("chat.preview_image", { defaultValue: "Preview image" })}
+                      >
+                        <img
+                          alt="upload"
+                          className="size-5 rounded object-cover shrink-0"
+                          src={resolveFileUrl(part.url)}
+                        />
+                        <span className="truncate">{partLabel(part, t)}</span>
+                      </button>
                     ) : (
-                      partIcon(part)
+                      <>
+                        {partIcon(part)}
+                        <span className="truncate">{partLabel(part, t)}</span>
+                      </>
                     )}
-                    <span className="truncate">{partLabel(part, t)}</span>
                     <ExtractionBadge part={part} />
                     <button
                       className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                      onClick={async () => {
+                      onClick={async (e) => {
+                        e.stopPropagation();
                         if (!ready || disabled || isGenerating || submitting) return;
 
                         const fileId = getPartFileId(part);
@@ -1169,6 +1204,53 @@ function ChatInputInner({
         <p className="mt-2 text-center text-xs text-muted-foreground">{sendHint}</p>
         {error ? <p className="mt-1 text-center text-xs text-destructive">{error}</p> : null}
       </div>
+      <Dialog open={Boolean(previewImage)} onOpenChange={(open) => !open && setPreviewImage(null)}>
+        <DialogContent className="max-h-[92vh] max-w-[92vw] border-0 bg-background/95 p-0 shadow-2xl">
+          <DialogTitle className="sr-only">
+            {previewImage?.name || t("chat.preview_image", { defaultValue: "Preview image" })}
+          </DialogTitle>
+          <div className="flex items-center justify-between border-b px-4 py-2">
+            <span className="truncate text-sm font-medium text-foreground max-w-[70vw]">
+              {previewImage?.name}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Download"
+                title="Download image"
+                onClick={() => {
+                  if (previewImage) {
+                    void downloadAttachmentImage(previewImage.url, previewImage.name);
+                  }
+                }}
+              >
+                <Download className="size-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Close"
+                title="Close"
+                onClick={() => setPreviewImage(null)}
+              >
+                <X className="size-4" />
+              </Button>
+            </div>
+          </div>
+          <div className="flex max-h-[calc(92vh-48px)] items-center justify-center overflow-auto bg-muted/20 p-3">
+            {previewImage ? (
+              <img
+                src={previewImage.url}
+                alt={previewImage.name || "Preview"}
+                className="max-h-[calc(92vh-72px)] max-w-full object-contain rounded"
+              />
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

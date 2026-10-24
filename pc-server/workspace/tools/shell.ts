@@ -18,6 +18,7 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { reportError } from "../../observability/app-errors";
+import { state } from "../../persistence/json-store";
 
 export interface ShellConfig {
   shell: string;
@@ -206,7 +207,44 @@ export function getShellConfig(customShellPath?: string): ShellConfig {
 }
 
 export function getShellEnv(): NodeJS.ProcessEnv {
-  return { ...process.env };
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  try {
+    const services = (state as any)?.settings?.searchServices;
+    if (Array.isArray(services)) {
+      for (const svc of services) {
+        if (!svc || typeof svc !== "object") continue;
+        const type = String(svc.type ?? "").toLowerCase();
+        const rawKey = String(svc.apiKey ?? "").trim();
+        if (!rawKey) continue;
+        const firstKey = rawKey.split(/[\s,]+/)[0]?.trim();
+        if (!firstKey) continue;
+
+        if (type === "firecrawl" && !env.FIRECRAWL_API_KEY) {
+          env.FIRECRAWL_API_KEY = firstKey;
+        } else if (type === "jina" && !env.JINA_API_KEY) {
+          env.JINA_API_KEY = firstKey;
+        } else if (type === "brave") {
+          if (!env.BRAVE_API_KEY) env.BRAVE_API_KEY = firstKey;
+          if (!env.BRAVE_SEARCH_API_KEY) env.BRAVE_SEARCH_API_KEY = firstKey;
+        } else if (type === "tavily" && !env.TAVILY_API_KEY) {
+          env.TAVILY_API_KEY = firstKey;
+        } else if (type === "perplexity" && !env.PERPLEXITY_API_KEY) {
+          env.PERPLEXITY_API_KEY = firstKey;
+        } else if (type === "exa" && !env.EXA_API_KEY) {
+          env.EXA_API_KEY = firstKey;
+        } else if (type === "serper" && !env.SERPER_API_KEY) {
+          env.SERPER_API_KEY = firstKey;
+        } else if (type === "bocha" && !env.BOCHA_API_KEY) {
+          env.BOCHA_API_KEY = firstKey;
+        } else if (type === "linkup" && !env.LINKUP_API_KEY) {
+          env.LINKUP_API_KEY = firstKey;
+        }
+      }
+    }
+  } catch {
+    // Ignore if store uninitialized
+  }
+  return env;
 }
 
 /**

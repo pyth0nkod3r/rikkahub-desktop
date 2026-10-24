@@ -48,7 +48,7 @@ export class CdpSession {
       const timer = setTimeout(() => {
         ws.close();
         reject(new Error("WebSocket CDP connection timeout"));
-      }, 5000);
+      }, 12000);
 
       ws.onopen = () => {
         clearTimeout(timer);
@@ -150,6 +150,7 @@ export class BrowserDriver {
       exe,
       `--remote-debugging-port=${this.port}`,
       "--remote-debugging-address=127.0.0.1",
+      "--remote-allow-origins=*",
       `--user-data-dir=${profileDir}`,
       "--headless=new",
       "--no-sandbox",
@@ -170,7 +171,11 @@ export class BrowserDriver {
 
     // Wait for CDP endpoint to be ready
     let targetWsUrl: string | null = null;
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < 100; i++) {
+      if (this.process && this.process.exitCode !== null) {
+        this.close();
+        throw new Error(`Headless browser process exited prematurely with code ${this.process.exitCode}.`);
+      }
       await new Promise((r) => setTimeout(r, 200));
       try {
         const resp = await fetch(`http://127.0.0.1:${this.port}/json/version`);
@@ -186,7 +191,7 @@ export class BrowserDriver {
 
     if (!targetWsUrl) {
       this.close();
-      throw new Error("Failed to connect to headless browser CDP within 6 seconds.");
+      throw new Error("Failed to connect to headless browser CDP within 20 seconds.");
     }
 
     // Get active page target

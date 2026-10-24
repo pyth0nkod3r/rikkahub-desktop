@@ -18,6 +18,7 @@ export function buildSearchContext() {
   return `
 Available tools: search_web, scrape_web
 Use search_web when the user needs current, external, or verifiable information. The selected service is ${serviceName}. The tool returns source ids as plain numbers. After using search information, cite sources in the format [citation,domain](1), [citation,domain](2). If snippets are not enough, call scrape_web for a specific result URL.
+Important: Always use the built-in search_web and scrape_web tools as your primary, default approach for web searching and page fetching. Do NOT default to shell commands (like python with ddgs, curl, or wget) for web search; shell-based search is an optional fallback only if search_web or scrape_web is unavailable or fails.
 `.trim();
 }
 
@@ -1279,6 +1280,81 @@ export async function runScrapeWeb(params: Record<string, JsonValue>) {
         description: item?.description,
         language: item?.language,
         text: String(item?.text ?? "").slice(0, 12000),
+      };
+    });
+  }
+  if (type === "firecrawl") {
+    return await withSearchKeyFailover(String(service.apiKey ?? ""), async (apiKey) => {
+      const endpoint = requireServiceEndpoint(service, "fetch");
+      const requestBody = { url: target, formats: ["markdown"] };
+      const requestHeaders = { "Content-Type": "application/json", Authorization: `Bearer ${apiKey.trim()}` };
+      const response = await fetchWithTimeout(endpoint, {
+        method: "POST",
+        headers: requestHeaders,
+        body: JSON.stringify(requestBody),
+      });
+      const { text, raw } = await parseJsonResponse(response);
+      addLog({
+        providerId: String(service.id ?? "search"),
+        providerName: nameOfSearchService(service),
+        url: endpoint,
+        ok: response.ok,
+        status: response.status,
+        kind: "tool:scrape_web",
+        toolName: "scrape_web",
+        durationMs: Date.now() - started,
+        method: "POST",
+        requestHeaders,
+        responseHeaders: Object.fromEntries(response.headers.entries()),
+        requestBody: jsonBody(requestBody),
+        responseBody: textBody(text),
+        error: response.ok ? undefined : textBody(text),
+      });
+      if (!response.ok) throwSearchStatus(response.status, `Firecrawl scrape failed with code ${response.status}: ${text.slice(0, 500)}`);
+      const data = isRecord(raw?.data) ? (raw.data as Record<string, JsonValue>) : {};
+      const meta = isRecord(data?.metadata) ? (data.metadata as Record<string, JsonValue>) : {};
+      return {
+        url: String(meta?.sourceURL ?? meta?.url ?? target),
+        title: meta?.title ? String(meta.title) : undefined,
+        description: meta?.description ? String(meta.description) : undefined,
+        language: meta?.language ? String(meta.language) : undefined,
+        text: String(data?.markdown ?? data?.content ?? "").slice(0, 20000),
+      };
+    });
+  }
+  if (type === "jina") {
+    return await withSearchKeyFailover(String(service.apiKey ?? ""), async (apiKey) => {
+      const endpoint = `https://r.jina.ai/${target}`;
+      const requestHeaders: Record<string, string> = { Accept: "application/json", Authorization: `Bearer ${apiKey.trim()}` };
+      const response = await fetchWithTimeout(endpoint, {
+        method: "GET",
+        headers: requestHeaders,
+      });
+      const { text, raw } = await parseJsonResponse(response);
+      addLog({
+        providerId: String(service.id ?? "search"),
+        providerName: nameOfSearchService(service),
+        url: endpoint,
+        ok: response.ok,
+        status: response.status,
+        kind: "tool:scrape_web",
+        toolName: "scrape_web",
+        durationMs: Date.now() - started,
+        method: "GET",
+        requestHeaders,
+        responseHeaders: Object.fromEntries(response.headers.entries()),
+        requestBody: jsonBody({ url: target }),
+        responseBody: textBody(text),
+        error: response.ok ? undefined : textBody(text),
+      });
+      if (!response.ok) throwSearchStatus(response.status, `Jina reader failed with code ${response.status}: ${text.slice(0, 500)}`);
+      const data = isRecord(raw?.data) ? (raw.data as Record<string, JsonValue>) : {};
+      return {
+        url: String(data?.url ?? target),
+        title: data?.title ? String(data.title) : undefined,
+        description: data?.description ? String(data.description) : undefined,
+        language: undefined,
+        text: String(data?.content ?? text).slice(0, 20000),
       };
     });
   }

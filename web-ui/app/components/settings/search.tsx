@@ -156,7 +156,7 @@ function SearchApiKeyList({
   // 与后端 /[\s,]+/ 兼容,key 不含换行,比逗号/空格更不易和 key 本身冲突)。
   const commit = (next: string[]) => {
     setKeys(next);
-    onChange(next.filter((k) => k.trim()).join("\n"));
+    onChange(next.map((k) => k.trim()).filter(Boolean).join("\n"));
   };
   const update = (index: number, val: string) => {
     const next = [...keys];
@@ -173,7 +173,7 @@ function SearchApiKeyList({
   };
   // 失焦时收掉尾部连续空框(点 + 又没填)。中间空框不动——用户可能还要填。
   const trimTrailingEmpty = () => {
-    let next = [...keys];
+    let next = keys.map((k) => k.trim());
     while (next.length > 1 && next[next.length - 1].trim() === "") next.pop();
     if (next.length !== keys.length) commit(next);
   };

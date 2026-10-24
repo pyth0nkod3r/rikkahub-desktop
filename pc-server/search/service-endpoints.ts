@@ -50,8 +50,8 @@ export const SEARCH_SERVICE_ENDPOINTS: Readonly<Record<string, SearchServiceEndp
   linkup: { base: "https://api.linkup.so", search: "/v1/search" },
   metaso: { base: "https://metaso.cn", search: "/api/v1/search" },
   ollama: { base: "https://ollama.com", search: "/api/web_search", fetch: "/api/web_fetch" },
-  jina: { base: "https://s.jina.ai/", search: "", legacyFields: ["searchUrl"] },
-  firecrawl: { base: "https://api.firecrawl.dev", search: "/v2/search" },
+  jina: { base: "https://s.jina.ai/", search: "", fetch: "", fetchBase: "https://r.jina.ai/", legacyFields: ["searchUrl"] },
+  firecrawl: { base: "https://api.firecrawl.dev", search: "/v2/search", fetch: "/v1/scrape" },
   grok: { base: "https://api.x.ai/v1", search: "/responses", legacyFields: ["customUrl"] },
 };
 

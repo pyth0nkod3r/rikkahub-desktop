@@ -428,12 +428,30 @@ function McpServerEditor({
             onTitleCommit={(name) => patchDraft({ ...draft, commonOptions: { ...common, name } })}
             description={t("settings:mcp.server.detail_desc")}
             action={
-              <LabeledSwitch
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="tertiary"
+                  size="compact"
+                  onClick={async () => {
+                    try {
+                      await api.post("settings/mcp-server/enable-all", { serverId: draft.id });
+                      await pullSettings(onSettings);
+                      toast.success(t("settings:mcp.applied_to_all_assistants", { defaultValue: "Enabled for all assistants" }));
+                    } catch (e) {
+                      toast.error(e instanceof Error ? e.message : "Failed to apply to all assistants");
+                    }
+                  }}
+                >
+                  {t("settings:mcp.apply_to_all", { defaultValue: "Enable for all assistants" })}
+                </Button>
+                <LabeledSwitch
                 label={t("settings:mcp.enabled")}
                 checked={serverEnabled}
                 onCheckedChange={(checked) => patchCommon({ enable: checked })}
               />
-            }
+            </div>
+          }
           />
 
           <SettingsGroup title={t("settings:mcp.connection_title")} fields>

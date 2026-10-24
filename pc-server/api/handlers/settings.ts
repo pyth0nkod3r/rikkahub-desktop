@@ -513,6 +513,30 @@ export async function handleSettingsRoutes(request: Request, url: URL, path: str
       return json({ status: "deleted" });
     });
   }
+  if (path === "settings/mcp-server/enable-all" && request.method === "POST") {
+    const body = await readJson<{ serverId?: string }>(request);
+    const serverId = body?.serverId ? String(body.serverId) : undefined;
+    const targetIds = serverId
+      ? [serverId]
+      : (state.settings.mcpServers as Array<Record<string, JsonValue>>)
+          .filter((s) => isRecord(s.commonOptions) && s.commonOptions.enable !== false)
+          .map((s) => String(s.id));
+
+    updateSettings({
+      ...state.settings,
+      assistants: state.settings.assistants.map((assistant) => {
+        const current = new Set(getStringArray(assistant.mcpServers));
+        for (const tid of targetIds) {
+          current.add(tid);
+        }
+        return {
+          ...assistant,
+          mcpServers: Array.from(current),
+        };
+      }),
+    });
+    return json({ status: "ok", boundServerIds: targetIds });
+  }
   if (path === "settings/mcp-server/reorder" && request.method === "POST") {
     const body = await readJson<{ ids: string[] }>(request);
     updateSettings({ ...state.settings, mcpServers: reorderByIds(state.settings.mcpServers as JsonValue[], body.ids ?? []) });
@@ -716,7 +740,8 @@ ${outcome.serverName ? `<p>${esc(outcome.serverName)}</p>` : ""}
   }
   if (path === "settings/search/service/detail" && request.method === "POST") {
     const body = await readJson<SearchService>(request);
-    const service: SearchService = { ...body, id: String(body.id ?? id()) };
+    const apiKey = typeof body.apiKey === "string" ? body.apiKey.split(/[\s,]+/).map((k) => k.trim()).filter(Boolean).join("\n") : body.apiKey;
+    const service: SearchService = { ...body, id: String(body.id ?? id()), apiKey };
     const services = state.settings.searchServices as SearchService[];
     const existing = services.find((item) => String(item.id) === String(service.id));
     // Invalidate testPassed when any auth/endpoint field changes. Preset types
@@ -744,7 +769,8 @@ ${outcome.serverName ? `<p>${esc(outcome.serverName)}</p>` : ""}
   if (path === "settings/search/service/test" && request.method === "POST") {
     const body = await readJson<SearchService>(request);
     try {
-      const result = await testSearchService(body);
+      const testPayload = typeof body.apiKey === "string" ? { ...body, apiKey: body.apiKey.split(/[\s,]+/).map((k) => k.trim()).filter(Boolean).join("\n") } : body;
+      const result = await testSearchService(testPayload);
       // 多 key 服务全量测试后始终返回结构化结果(含每个 key 的状态),不再用 502 表达"某个 key 失败"。
       // 只有 status=ok(至少一个 key 可用,或无 key 服务直连成功)才标 testPassed,让搜索 picker 放行。
       if (result.status === "ok") {

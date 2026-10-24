@@ -382,7 +382,7 @@ export function resolveMcpToolServer(
 ): { server: Record<string, JsonValue>; rawToolName: string } | null {
   const selected = new Set(getStringArray(assistant.mcpServers));
   const servers = (mcpServers as Array<Record<string, JsonValue>>)
-    .filter((server) => selected.has(String(server.id ?? "")) && isRecord(server.commonOptions) && server.commonOptions.enable !== false);
+    .filter((server) => (selected.has("*") || selected.has(String(server.id ?? ""))) && isRecord(server.commonOptions) && server.commonOptions.enable !== false);
   for (const server of servers) {
     const common = server.commonOptions as Record<string, JsonValue>;
     const tools = Array.isArray(common.tools) ? common.tools.filter(isRecord) : [];
