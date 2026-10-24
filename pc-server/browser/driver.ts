@@ -17,13 +17,16 @@ const CHROME_PATHS = [
 ];
 
 export function findBrowserExecutable(): string | null {
+  if ((state.settings as any)?.browserPath && existsSync((state.settings as any).browserPath)) {
+    return (state.settings as any).browserPath;
+  }
   if (process.env.BROWSER_PATH && existsSync(process.env.BROWSER_PATH)) {
     return process.env.BROWSER_PATH;
   }
-  for (const p of EDGE_PATHS) {
+  for (const p of CHROME_PATHS) {
     if (existsSync(p)) return p;
   }
-  for (const p of CHROME_PATHS) {
+  for (const p of EDGE_PATHS) {
     if (existsSync(p)) return p;
   }
   return null;
