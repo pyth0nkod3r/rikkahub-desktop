@@ -403,8 +403,10 @@ export async function handleConversationRoutes(request: Request, url: URL, path:
           userMessage.parts = await attachOcrToImageParts(userMessage.parts, picked.model);
           if (getConversation(conversation.id) !== conversation) return;
           persistConversation(conversation);
-          broadcastConversation(conversation);
-          await generateAnswer(conversation.id, assistant, picked);
+          conversation.updateAt = Date.now();
+          persistConversation(conversation);
+          broadcastNodeUpdate(conversation, userNode);
+          void generateAnswer(conversation);
         } finally {
           releaseConversation(conversation.id);
         }
