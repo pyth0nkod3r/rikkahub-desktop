@@ -3,6 +3,9 @@ name: Cleanup Workflow Runs
 on:
   schedule:
     - cron: '0 0 * * *' # Run daily at midnight UTC
+  workflow_run:
+    workflows: ["Build Windows Desktop Installer", "CI", "Docker", "Rust", "Build Linux Binary"]
+    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -10,18 +13,66 @@ permissions:
 
 jobs:
   prune-runs:
-    name: Prune Old Workflow Runs
+    name: Enforce Workflow Retention Policy
     runs-on: ubuntu-latest
     steps:
-      - name: Retain only the most recent 3 workflow runs
+      - name: Prune failed runs and retain only the 10 most recent successful runs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
         run: |
-          echo "Checking workflow runs for $GH_REPO..."
-          RUNS=$(gh run list --repo "$GH_REPO" --limit 100 --json databaseId,createdAt --jq 'sort_by(.createdAt) | reverse | .[3:][].databaseId' || true)
-          for RUN_ID in $RUNS; do
-            echo "Deleting run $RUN_ID..."
-            gh run delete "$RUN_ID" --repo "$GH_REPO" || true
-          done
-          echo "Done: Enforced convention of keeping only the 3 most recent workflow runs."
+          node -e "
+            const { execSync } = require('child_process');
+            const repo = process.env.GH_REPO;
+            console.log('Fetching workflow runs for ' + repo + '...');
+            
+            let runs = [];
+            try {
+              const output = execSync('gh run list --repo ' + repo + ' --limit 100 --json databaseId,status,conclusion,createdAt,workflowName', { encoding: 'utf8' });
+              runs = JSON.parse(output);
+            } catch (err) {
+              console.error('Failed to list runs:', err.message);
+              process.exit(0);
+            }
+
+            // Exclude this currently executing cleanup run if present
+            const currentWorkflowName = 'Cleanup Workflow Runs';
+            const runsToProcess = runs.filter(r => r.workflowName !== currentWorkflowName);
+
+            // 1. Identify all failed / non-successful completed runs
+            const nonSuccessful = runsToProcess.filter(r => r.status === 'completed' && r.conclusion !== 'success');
+            console.log('Found ' + nonSuccessful.length + ' failed/non-successful workflow run(s) to eliminate.');
+
+            for (const r of nonSuccessful) {
+              try {
+                console.log('Deleting non-successful run ' + r.databaseId + ' (' + (r.conclusion || r.status) + ')...');
+                execSync('gh run delete ' + r.databaseId + ' --repo ' + repo, { stdio: 'inherit' });
+              } catch (e) {
+                console.warn('Could not delete run ' + r.databaseId + ': ' + e.message);
+              }
+            }
+
+            // 2. Identify successful runs and keep only the 10 most recent
+            const successful = runsToProcess
+              .filter(r => r.conclusion === 'success')
+              .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+            console.log('Found ' + successful.length + ' successful run(s).');
+            const excessSuccessful = successful.slice(10);
+
+            if (excessSuccessful.length > 0) {
+              console.log('Deleting ' + excessSuccessful.length + ' older successful run(s) beyond the 10 most recent...');
+              for (const r of excessSuccessful) {
+                try {
+                  console.log('Deleting older successful run ' + r.databaseId + ' (' + r.createdAt + ')...');
+                  execSync('gh run delete ' + r.databaseId + ' --repo ' + repo, { stdio: 'inherit' });
+                } catch (e) {
+                  console.warn('Could not delete run ' + r.databaseId + ': ' + e.message);
+                }
+              }
+            } else {
+              console.log('Successful runs within limit (' + successful.length + '/10). No excess to prune.');
+            }
+
+            console.log('Done: Enforced directive of retaining only the 10 most recent successful workflows and eliminating all failed runs.');
+          "
