@@ -12,6 +12,8 @@ import {
   isKimiReasoningModel,
   isKimiSamplingLockedModel,
   isMiMoOfficialHost,
+  isOfficialMiniMaxHost,
+  isOfficialStepFunHost,
   isSamplingLockedModel,
   isSiliconFlowEffortModel,
   isThinkingLevelGeminiModel,
@@ -243,6 +245,21 @@ describe("request-dialect 厂商思考开关协议", () => {
     // 误伤面:别家/空串不命中。
     expect(isMiMoOfficialHost("api.openai.com")).toBe(false);
     expect(isMiMoOfficialHost("")).toBe(false);
+  });
+
+  it("MiniMax 与 StepFun 官方主机判定", () => {
+    expect(isOfficialMiniMaxHost("api.minimax.chat")).toBe(true);
+    expect(isOfficialMiniMaxHost("api.minimaxi.chat")).toBe(true);
+    expect(isOfficialMiniMaxHost("api.minimax.io")).toBe(true);
+    expect(isOfficialMiniMaxHost("api.minimaxi.com")).toBe(true);
+    expect(isOfficialMiniMaxHost("kiosapi.com")).toBe(false);
+    expect(isOfficialMiniMaxHost("openrouter.ai")).toBe(false);
+    expect(isOfficialMiniMaxHost("")).toBe(false);
+
+    expect(isOfficialStepFunHost("api.stepfun.com")).toBe(true);
+    expect(isOfficialStepFunHost("stepfun.ai")).toBe(true);
+    expect(isOfficialStepFunHost("kiosapi.com")).toBe(false);
+    expect(isOfficialStepFunHost("")).toBe(false);
   });
 });
 

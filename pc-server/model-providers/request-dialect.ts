@@ -374,6 +374,32 @@ export function isMiMoOfficialHost(host: string): boolean {
   return host === "api.xiaomimimo.com" || host.endsWith(".xiaomimimo.com");
 }
 
+/** MiniMax 官方主机(api.minimax.chat, api.minimaxi.chat, api.minimax.io, api.minimaxi.com 及子域)。
+ *  官方接口支持 512K 极长输出上限;中转/第三方网关(如 OneAPI/NewAPI)通常按通道上限(如 128K/256K)校验,
+ *  超限时直接 400 bad_response_status_code / Invalid request。 */
+export function isOfficialMiniMaxHost(host: string): boolean {
+  return (
+    host === "api.minimax.chat" ||
+    host.endsWith(".minimax.chat") ||
+    host === "api.minimaxi.chat" ||
+    host.endsWith(".minimaxi.chat") ||
+    host === "api.minimax.io" ||
+    host.endsWith(".minimax.io") ||
+    host === "api.minimaxi.com" ||
+    host.endsWith(".minimaxi.com")
+  );
+}
+
+/** 阶跃星辰 StepFun 官方主机(api.stepfun.com 与 stepfun.ai 及子域)。 */
+export function isOfficialStepFunHost(host: string): boolean {
+  return (
+    host === "api.stepfun.com" ||
+    host.endsWith(".stepfun.com") ||
+    host === "stepfun.ai" ||
+    host.endsWith(".stepfun.ai")
+  );
+}
+
 /** SiliconFlow 上支持 reasoning_effort 的托管模型（官方：DeepSeek-V4 系与
  *  Pro/zai-org/GLM-5.2；服务端自行收拢 low/medium→high、xhigh→max，客户端原样
  *  透传）。这些模型同时在 enable_thinking 白名单内，两字段并发。 */

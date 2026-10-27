@@ -29,7 +29,8 @@ import {
   isArkSeed2Model,
   isDashScopeEffortQwenModel,
   isKimiK3Model,
-  isOfficialOpenAiHost,
+  isOfficialMiniMaxHost,
+  isOfficialStepFunHost,
   isSiliconFlowEffortModel,
   isZhipuEffortModel,
   isZhipuForcedThinkingModel,
@@ -109,6 +110,7 @@ export function inferContextWindowFallback(modelId: string): number {
 export interface PiModelLimits {
   contextWindow?: number | null;
   maxTokens?: number | null;
+  explicitMaxTokens?: boolean;
 }
 
 /** 协议映射（方案 §3.5 映射表）。返回 null = 无法映射，走诚实过滤面。 */
@@ -661,10 +663,14 @@ export function mapProviderModelToPi(provider: Provider, model: Model, limits?: 
     typeof limits?.maxTokens === "number" && limits.maxTokens > 0 ? limits.maxTokens : DEFAULT_OUTPUT_TOKENS;
   const host = hostOfProvider(provider);
   const isDeepSeekRelay = host !== "api.deepseek.com" && /deepseek/i.test(model.modelId);
+  const isMiniMaxRelay = !isOfficialMiniMaxHost(host) && /minimax/i.test(model.modelId);
+  const isStepFunRelay = !isOfficialStepFunHost(host) && /step/i.test(model.modelId);
   const maxTokens =
     isDeepSeekRelay && !limits?.explicitMaxTokens && rawMaxTokens > 16_384
       ? 16_384
-      : rawMaxTokens;
+      : (isMiniMaxRelay || isStepFunRelay) && !limits?.explicitMaxTokens && rawMaxTokens > 128_000
+        ? 128_000
+        : rawMaxTokens;
 
   const config: ProviderConfigInput = {
     name: provider.name,

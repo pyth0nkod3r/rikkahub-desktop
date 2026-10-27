@@ -273,6 +273,28 @@ describe("mapProviderModelToPi", () => {
     expect(resExplicit.mapping.config.models?.[0]?.maxTokens).toBe(384_000);
   });
 
+  it("MiniMax 与 StepFun 在第三方中转站未显式配置 maxTokens 时钳位在 128000,防 OneAPI 超限 Invalid request", () => {
+    const relay = makeProvider({ id: "p1", name: "Kiosapi", baseUrl: "https://api.kiosapi.com/v1" });
+    const mmClamped = mapProviderModelToPi(relay, model("minimax-m3.1-flash-free"), { maxTokens: 512_000 });
+    if (!mmClamped.ok) throw new Error(mmClamped.reason);
+    expect(mmClamped.mapping.config.models?.[0]?.maxTokens).toBe(128_000);
+
+    const stepClamped = mapProviderModelToPi(relay, model("step-3.7-flash"), { maxTokens: 262_144 });
+    if (!stepClamped.ok) throw new Error(stepClamped.reason);
+    expect(stepClamped.mapping.config.models?.[0]?.maxTokens).toBe(128_000);
+
+    // 用户显式配置时不钳位
+    const mmExplicit = mapProviderModelToPi(relay, model("minimax-m3.1-flash-free"), { maxTokens: 512_000, explicitMaxTokens: true });
+    if (!mmExplicit.ok) throw new Error(mmExplicit.reason);
+    expect(mmExplicit.mapping.config.models?.[0]?.maxTokens).toBe(512_000);
+
+    // 官方端点不钳位
+    const officialMm = makeProvider({ id: "p2", name: "MiniMax Official", baseUrl: "https://api.minimax.chat/v1" });
+    const mmOfficial = mapProviderModelToPi(officialMm, model("minimax-m3.1-flash-free"), { maxTokens: 512_000 });
+    if (!mmOfficial.ok) throw new Error(mmOfficial.reason);
+    expect(mmOfficial.mapping.config.models?.[0]?.maxTokens).toBe(512_000);
+  });
+
   it("未配置 contextLength 时默认采用 1M+ 窗口,识别 2M/4M 与小窗口后缀,防任意模型被过早自动压缩", () => {
     const relay = makeProvider({ id: "p1", name: "Kiosapi", baseUrl: "https://api.kiosapi.com/v1" });
     const dsFlash = mapProviderModelToPi(relay, model("deepseek-v4.1-flash-free"));
