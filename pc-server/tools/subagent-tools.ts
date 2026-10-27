@@ -26,6 +26,15 @@ export function encodeRun(run: SubAgentRun): Record<string, JsonValue> {
     trip_count: run.tripCount,
   };
   if (run.modelId) result.model_id = run.modelId;
+  if (run.resolvedModelSlug) result.resolved_model = run.resolvedModelSlug;
+  if (run.resolvedModelId) result.resolved_model_uuid = run.resolvedModelId;
+  if (run.providerName) result.provider = run.providerName;
+  if (run.providerType) result.provider_type = run.providerType;
+  if (run.endpoint) result.endpoint = run.endpoint;
+  if (run.httpStatus != null) result.http_status = run.httpStatus;
+  if (run.resumedAfterMs != null) result.resumed_after_ms = run.resumedAfterMs;
+  if (run.attemptedModel) result.attempted_model = run.attemptedModel;
+  if (run.fallbackReason) result.fallback_reason = run.fallbackReason;
   if (run.agentName) result.agent = run.agentName;
   if (run.subConversationId) result.sub_conversation_id = run.subConversationId;
   if (run.finishedAtMs != null) result.finished_at_ms = run.finishedAtMs;

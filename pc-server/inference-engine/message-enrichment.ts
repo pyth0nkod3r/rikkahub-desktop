@@ -267,7 +267,10 @@ export interface EnrichResult {
  *  显式返回。 */
 export function enrichMessages(baseMessages: Message[], options: EnrichOptions): EnrichResult {
   const { conversation, assistant, model } = options;
-  const template = assistant.messageTemplate?.trim() || "{{ message }}";
+  const isSubAgent = conversation?.id ? SubAgentToolPolicies.isSubAgent(conversation.id) : false;
+  // 对齐安卓 TemplateTransformer.kt (commit ec6d23dc):子智能体(subagent)拥有独立的
+  // 自我身份与 systemPrompt,不得继承宿主助手的消息模板(如 "[D4RKN3T]: {{message}}")或角色注入。
+  const template = isSubAgent ? "{{ message }}" : (assistant.messageTemplate?.trim() || "{{ message }}");
 
   // 1. 窗口化:滞回截断与压缩切点锚取 max(锚不在序列中视为无锚)。与聊天引擎
   //    "先截断、后提醒/注入"同序——合成行天然落在窗口内、压缩切点之后。
@@ -294,8 +297,8 @@ export function enrichMessages(baseMessages: Message[], options: EnrichOptions):
     options.timeReminderAnchor,
   );
 
-  // 4. lorebook/模式注入:系统位文本抽出,聊天位消息插队(合成 id 并入返回集)。
-  const injections = activePromptInjections(conversation, assistant, withReminders);
+  // 4. lorebook/模式注入:子智能体跳过宿主助手的角色注入,系统位文本抽出,聊天位消息插队(合成 id 并入返回集)。
+  const injections = isSubAgent ? [] : activePromptInjections(conversation, assistant, withReminders);
   const { system, chat } = splitInjectionsByPlacement(injections);
   const withRemindersIds = new Set(withReminders.map((msg) => msg.id));
   const injected = applyPromptInjectionsToMessages(withReminders, chat);

@@ -140,6 +140,23 @@ describe("message-enrichment", () => {
     expect(result.messages[0].parts[0]).toMatchObject({ type: "text", text: "User said: hello" });
   });
 
+  test("子智能体隔离:子智能体对话不继承宿主助手的 messageTemplate", () => {
+    const { SubAgentToolPolicies, SubAgentToolPolicy } = require("../subagents/policy");
+    const subConvId = "subagent-conv-123";
+    SubAgentToolPolicies.register(subConvId, new SubAgentToolPolicy([]));
+    try {
+      const a = assistant({ messageTemplate: "[D4RKN3T]: {{ message }}" });
+      const result = enrichMessages([userMessage("execute task", "2026-08-22T10:00:00Z")], {
+        conversation: conversation({ id: subConvId }),
+        assistant: a,
+        model,
+      });
+      expect(result.messages[0].parts[0]).toMatchObject({ type: "text", text: "execute task" });
+    } finally {
+      SubAgentToolPolicies.unregister(subConvId);
+    }
+  });
+
   test("时间提醒:首条 USER 恒提醒,间隔 >10min 再提醒,<10min 不提醒", () => {
     const a = assistant({ enableTimeReminder: true });
     const base = [

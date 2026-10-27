@@ -86,7 +86,7 @@ import { flushConvDirtyNow, getConversation, getConversationsDb, markConversatio
 import { checkoutConversation, releaseConversation } from "./working-set";
 import { conversationExistsInDb } from "./read-queries";
 import { reportError } from "../observability/app-errors";
-import { abortGeneration, abortReasonOf, awaitingApproval, compressing, generating } from "./generation-state";
+import { abortAuxiliary, abortGeneration, abortReasonOf, auxiliaryControllers, awaitingApproval, compressing, generating } from "./generation-state";
 import { deliverQueuedReply, holdMessageQueue, isQueueHeldByInterrupt, isQueuePaused, notifyQueuedGenerationDispatched, pauseMessageQueue, queueSnapshotFor, removeQueuedMessage, setOnQueuedGenerationDispatched, shiftNextQueued } from "./message-queue";
 import { clearSteeringChannel, drainSteeringMessages } from "./steering-channel";
 import {
@@ -657,74 +657,92 @@ setOnQueuedGenerationDispatched((conversationId, item) => {
 });
 
 async function runPostGenerationTasks(conversationId: string, snapshot: Conversation, assistantMessageId: string) {
-  const liveConversation = () => getConversation(conversationId);
-  // 快速模型解析一次,两个后台任务共用。null = 没配(空/出厂哨兵/指向已删模型)或对应
-  // 子功能被用户在设置里关停 → 两者都静默跳过:标题退成首条消息文本,建议不生成,不弹
-  // 任何失败提示,也不擅自拿主模型跑(建议回复每轮一次,用主模型不划算)。用户想要 AI
-  // 标题就去设置里配快速模型;只要其一就在快速模型卡的 Prompt 页关掉另一个。
-  const { title: titleModelId, suggestion: suggestionModelId } = resolvePostGenerationModelIds();
-  if (shouldAutoGenerateTitle(snapshot) && titleModelId) {
-    try {
-      const title = await generateTitleForConversation(snapshot, titleModelId);
-      const live = liveConversation();
-      if (live && shouldAutoGenerateTitle(live)) {
-        live.title = title;
-        persistConversation(live);
-        broadcastConversation(live);
+  // 对齐安卓 AuxJobRegistry / commit f85ab667：同一会话保留至多一个活动辅助任务控制器
+  abortAuxiliary(conversationId);
+  const controller = new AbortController();
+  auxiliaryControllers.set(conversationId, controller);
+  const signal = controller.signal;
+
+  try {
+    const liveConversation = () => getConversation(conversationId);
+    // 快速模型解析一次,两个后台任务共用。null = 没配(空/出厂哨兵/指向已删模型)或对应
+    // 子功能被用户在设置里关停 → 两者都静默跳过:标题退成首条消息文本,建议不生成,不弹
+    // 任何失败提示,也不擅自拿主模型跑(建议回复每轮一次,用主模型不划算)。用户想要 AI
+    // 标题就去设置里配快速模型;只要其一就在快速模型卡的 Prompt 页关掉另一个。
+    const { title: titleModelId, suggestion: suggestionModelId } = resolvePostGenerationModelIds();
+    if (shouldAutoGenerateTitle(snapshot) && titleModelId) {
+      try {
+        if (signal.aborted) return;
+        const title = await generateTitleForConversation(snapshot, titleModelId, { signal });
+        if (signal.aborted) return;
+        const live = liveConversation();
+        if (live && shouldAutoGenerateTitle(live)) {
+          live.title = title;
+          persistConversation(live);
+          broadcastConversation(live);
+        }
+      } catch (titleError) {
+        if (signal.aborted) return;
+        addLog({
+          providerId: "",
+          providerName: "RikkaHub PC",
+          url: "conversation:title",
+          ok: false,
+          status: 0,
+          kind: "aux:title",
+          error: titleError instanceof Error ? titleError.message : String(titleError),
+        });
+        // info 级:标题只是便利功能,回退首条消息文本后用户无感损失。只进错误中心供排查,
+        // 不弹全局 toast——后台任务的失败不该打断用户手上的事。
+        reportError("provider", "info", "标题自动生成失败，已回退为首条消息文本", titleError, "title_generation_failed");
+        // Title generation failed → fall back to first user message text (Android parity).
+        const live = liveConversation();
+        if (live && shouldAutoGenerateTitle(live)) {
+          const firstText = textFromParts(live.messages[0]?.messages[0]?.parts ?? []).trim();
+          const fallback = limitAuxiliaryText(firstText, TITLE_CHARACTER_LIMIT) || "New Conversation";
+          live.title = fallback;
+          persistConversation(live);
+          broadcastConversation(live);
+        }
       }
-    } catch (titleError) {
-      addLog({
-        providerId: "",
-        providerName: "RikkaHub PC",
-        url: "conversation:title",
-        ok: false,
-        status: 0,
-        kind: "aux:title",
-        error: titleError instanceof Error ? titleError.message : String(titleError),
-      });
-      // info 级:标题只是便利功能,回退首条消息文本后用户无感损失。只进错误中心供排查,
-      // 不弹全局 toast——后台任务的失败不该打断用户手上的事。
-      reportError("provider", "info", "标题自动生成失败，已回退为首条消息文本", titleError, "title_generation_failed");
-      // Title generation failed → fall back to first user message text (Android parity).
+    } else if (shouldAutoGenerateTitle(snapshot)) {
+      if (signal.aborted) return;
+      // 未配快速模型 → 不调任何模型,直接用首条用户消息文本命名(与 Android 同口径)。
       const live = liveConversation();
       if (live && shouldAutoGenerateTitle(live)) {
         const firstText = textFromParts(live.messages[0]?.messages[0]?.parts ?? []).trim();
         const fallback = limitAuxiliaryText(firstText, TITLE_CHARACTER_LIMIT) || "New Conversation";
-        live.title = fallback;
-        persistConversation(live);
-        broadcastConversation(live);
+        if (fallback !== live.title) {
+          live.title = fallback;
+          persistConversation(live);
+          broadcastConversation(live);
+        }
       }
     }
-  } else if (shouldAutoGenerateTitle(snapshot)) {
-    // 未配快速模型 → 不调任何模型,直接用首条用户消息文本命名(与 Android 同口径)。
-    const live = liveConversation();
-    if (live && shouldAutoGenerateTitle(live)) {
-      const firstText = textFromParts(live.messages[0]?.messages[0]?.parts ?? []).trim();
-      const fallback = limitAuxiliaryText(firstText, TITLE_CHARACTER_LIMIT) || "New Conversation";
-      if (fallback !== live.title) {
-        live.title = fallback;
-        persistConversation(live);
-        broadcastConversation(live);
-      }
-    }
-  }
 
-  if (!suggestionModelId) return;
-  try {
-    const suggestions = await generateSuggestionsForConversation(snapshot, suggestionModelId);
-    const live = liveConversation();
-    const lastNode = live?.messages[live.messages.length - 1];
-    const lastMessage = lastNode?.messages[lastNode.selectIndex] ?? lastNode?.messages[0];
-    if (live && lastMessage?.id === assistantMessageId && !generating.has(live.id)) {
-      live.chatSuggestions = suggestions;
-      live.updateAt = Date.now();
-      persistConversation(live);
-      broadcastConversation(live);
+    if (!suggestionModelId || signal.aborted) return;
+    try {
+      const suggestions = await generateSuggestionsForConversation(snapshot, suggestionModelId, { signal });
+      if (signal.aborted) return;
+      const live = liveConversation();
+      const lastNode = live?.messages[live.messages.length - 1];
+      const lastMessage = lastNode?.messages[lastNode.selectIndex] ?? lastNode?.messages[0];
+      if (live && lastMessage?.id === assistantMessageId && !generating.has(live.id)) {
+        live.chatSuggestions = suggestions;
+        live.updateAt = Date.now();
+        persistConversation(live);
+        broadcastConversation(live);
+      }
+    } catch (suggestionError) {
+      if (signal.aborted) return;
+      // Suggestions are auxiliary;正文生成状态不应受影响。info 级同标题:少几个建议 chip
+      // 不构成需要打扰用户的故障。
+      reportError("provider", "info", "会话建议生成失败", suggestionError, "suggestion_generation_failed");
     }
-  } catch (suggestionError) {
-    // Suggestions are auxiliary;正文生成状态不应受影响。info 级同标题:少几个建议 chip
-    // 不构成需要打扰用户的故障。
-    reportError("provider", "info", "会话建议生成失败", suggestionError, "suggestion_generation_failed");
+  } finally {
+    if (auxiliaryControllers.get(conversationId) === controller) {
+      auxiliaryControllers.delete(conversationId);
+    }
   }
 }
 

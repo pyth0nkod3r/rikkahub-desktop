@@ -56,6 +56,19 @@ function db(): Database | null {
       CREATE INDEX IF NOT EXISTS idx_pc_subagent_run_status
         ON pc_subagent_run (status, started_at_ms DESC);
     `);
+
+    // Schema migrations for model slug and observability fields
+    try { handle.exec("ALTER TABLE pc_subagent_profile ADD COLUMN model_slug TEXT"); } catch {}
+    try { handle.exec("ALTER TABLE pc_subagent_run ADD COLUMN resolved_model_id TEXT"); } catch {}
+    try { handle.exec("ALTER TABLE pc_subagent_run ADD COLUMN resolved_model_slug TEXT"); } catch {}
+    try { handle.exec("ALTER TABLE pc_subagent_run ADD COLUMN provider_name TEXT"); } catch {}
+    try { handle.exec("ALTER TABLE pc_subagent_run ADD COLUMN provider_type TEXT"); } catch {}
+    try { handle.exec("ALTER TABLE pc_subagent_run ADD COLUMN endpoint TEXT"); } catch {}
+    try { handle.exec("ALTER TABLE pc_subagent_run ADD COLUMN http_status INTEGER"); } catch {}
+    try { handle.exec("ALTER TABLE pc_subagent_run ADD COLUMN resumed_after_ms INTEGER"); } catch {}
+    try { handle.exec("ALTER TABLE pc_subagent_run ADD COLUMN attempted_model TEXT"); } catch {}
+    try { handle.exec("ALTER TABLE pc_subagent_run ADD COLUMN fallback_reason TEXT"); } catch {}
+
     ensuredDbs.add(handle);
   }
   return handle;
@@ -116,6 +129,7 @@ function rowToProfile(row: ProfileRow): SubAgentProfile {
     description: row.description,
     systemPrompt: row.system_prompt,
     modelId: row.model_id,
+    modelSlug: (row as any).model_slug ?? null,
     enabled: Boolean(row.enabled),
     tools: parseJsonArray(row.tools),
     capabilities: parseJsonArray(row.capabilities),
@@ -148,6 +162,15 @@ function rowToRun(row: RunRow): SubAgentRun {
     tokensIn: row.tokens_in,
     tokensOut: row.tokens_out,
     tripCount: row.trip_count,
+    resolvedModelId: (row as any).resolved_model_id ?? null,
+    resolvedModelSlug: (row as any).resolved_model_slug ?? null,
+    providerName: (row as any).provider_name ?? null,
+    providerType: (row as any).provider_type ?? null,
+    endpoint: (row as any).endpoint ?? null,
+    httpStatus: (row as any).http_status ?? null,
+    resumedAfterMs: (row as any).resumed_after_ms ?? null,
+    attemptedModel: (row as any).attempted_model ?? null,
+    fallbackReason: (row as any).fallback_reason ?? null,
   };
 }
 

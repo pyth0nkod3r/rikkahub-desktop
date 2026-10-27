@@ -184,6 +184,38 @@ describe("SubAgentProfileResolver", () => {
     );
     expect(explicitRes).toEqual({ type: "resolved", modelId: "m-explicit" });
   });
+
+  it("resolves profile model by modelSlug case-insensitively", () => {
+    const dummyProviders: any = [
+      {
+        id: "p-google",
+        name: "Google AI",
+        enabled: true,
+        models: [{ id: "uuid-gemini", modelId: "gemini-2.5-flash", displayName: "Gemini 2.5 Flash" }],
+      },
+    ];
+    const profile = { ...dummyProfiles[0], modelId: null, modelSlug: "Gemini-2.5-Flash" };
+    const res = resolveSubAgentModel({ type: "inherit" }, profile, dummyProviders);
+    expect(res).toEqual({ type: "resolved", modelId: "uuid-gemini" });
+  });
+
+  it("fails loudly when profile model provider is disabled (refuses silent fallback)", () => {
+    const dummyProviders: any = [
+      {
+        id: "p-google",
+        name: "Google AI",
+        enabled: false,
+        models: [{ id: "uuid-gemini", modelId: "gemini-2.5-flash", displayName: "Gemini 2.5 Flash" }],
+      },
+    ];
+    const profile = { ...dummyProfiles[0], modelId: "uuid-gemini", modelSlug: "gemini-2.5-flash" };
+    const res = resolveSubAgentModel({ type: "inherit" }, profile, dummyProviders);
+    expect(res.type).toBe("failed");
+    if (res.type === "failed") {
+      expect(res.message).toContain("Refusing silent fallback");
+      expect(res.message).toContain("disabled");
+    }
+  });
 });
 
 describe("SubAgentToolPolicy", () => {

@@ -24,7 +24,21 @@ export class GenerationAborted extends DOMException {
 
 /** 中止会话在跑的生成并声明意图;无在跑生成返回 false。只中止,不动 generating 登记——
  *  登记的清除/接管由调用方按自身语义处理(stop 端点清、写入口由新流 set 顶替)。 */
+/** 会话后台辅助任务（自动生成标题/后续建议）的在跑控制器注册表。
+ *  对齐安卓 AuxJobRegistry / commit f85ab667：同一会话至多保留一个在跑的辅助任务，
+ *  新生成开始或用户停止/重跑时及时中止旧任务，避免推挤本地模型 Prompt Cache 或覆盖标题。 */
+export const auxiliaryControllers = new Map<string, AbortController>();
+
+export function abortAuxiliary(conversationId: string): boolean {
+  const controller = auxiliaryControllers.get(conversationId);
+  if (!controller) return false;
+  controller.abort(new DOMException("Auxiliary replaced", "AbortError"));
+  auxiliaryControllers.delete(conversationId);
+  return true;
+}
+
 export function abortGeneration(conversationId: string, reason: GenerationAbortReason): boolean {
+  abortAuxiliary(conversationId);
   const controller = generating.get(conversationId);
   if (!controller) return false;
   controller.abort(new GenerationAborted(reason));

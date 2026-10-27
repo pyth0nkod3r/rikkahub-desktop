@@ -65,7 +65,11 @@ export function limitAuxiliaryText(text: string, limit: number) {
 
 /** 标题生成。modelId 由调用方决定口径:自动生成传 resolveFastModelId()(没配就不该调到这里);
  *  手动「重新生成标题」传会话模型兜底——那是用户显式点的一次动作,回退用主模型合理。 */
-export async function generateTitleForConversation(conversation: Conversation, modelId: string) {
+export async function generateTitleForConversation(
+  conversation: Conversation,
+  modelId: string,
+  options?: { signal?: AbortSignal },
+) {
   const summary = conversationSummary(conversation, 4).trim();
   const firstText = textFromParts(conversation.messages[0]?.messages[0]?.parts ?? []).trim();
   const content = summary || firstText;
@@ -78,6 +82,7 @@ export async function generateTitleForConversation(conversation: Conversation, m
   // 不可关,硬关反而出错;APP 亦默认 AUTO)。
   const text = await fetchAuxiliaryText(modelId, prompt, "title", {
     conversationId: conversation.id,
+    signal: options?.signal,
   });
   return limitAuxiliaryText(
     firstAuxiliaryLine(cleanAuxiliaryText(text, limitAuxiliaryText(firstText, TITLE_CHARACTER_LIMIT) || "New Conversation")),
@@ -465,7 +470,11 @@ export function markOcrPendingParts(parts: MessagePart[], modelItem: Model) {
 }
 
 /** 建议回复生成。modelId 必传(快速模型):未配置时调用方不该调到这里。 */
-export async function generateSuggestionsForConversation(conversation: Conversation, modelId: string) {
+export async function generateSuggestionsForConversation(
+  conversation: Conversation,
+  modelId: string,
+  options?: { signal?: AbortSignal },
+) {
   const content = conversationSummary(conversation, 8);
   if (!content) return [];
   const prompt = applyPlaceholders(state.settings.suggestionPrompt || DEFAULT_SUGGESTION_PROMPT, {
@@ -474,6 +483,7 @@ export async function generateSuggestionsForConversation(conversation: Conversat
   });
   const text = await fetchAuxiliaryText(modelId, prompt, "suggestion", {
     conversationId: conversation.id,
+    signal: options?.signal,
   });
   return uniqueStrings(
     text

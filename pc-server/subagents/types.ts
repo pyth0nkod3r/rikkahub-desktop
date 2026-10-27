@@ -10,7 +10,7 @@ export type SubAgentStatus =
   | "cancelled";
 
 export const SubAgentDefaults = {
-  DEFAULT_TIMEOUT_SECONDS: 300,
+  DEFAULT_TIMEOUT_SECONDS: 1800,
   MAX_TIMEOUT_SECONDS: 1800,
   DEFAULT_MAX_TRIPS: 12,
   MAX_MAX_TRIPS: 30,

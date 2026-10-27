@@ -18,6 +18,7 @@ import type { Assistant, Message, Provider } from "../foundation/types";
 import { initialApprovalState } from "../tools/approval";
 import { toolExecutionErrorPayload } from "../tools/format";
 import { finishReasoningParts } from "./parts";
+import { extractDsmlToolCalls, hasDsmlToolDelimiters, sanitizeMessageDsmlParts } from "./dsml";
 import type { StreamHooksWithSink, ToolCall, ToolDispatchContext, ToolResult } from "./events";
 import type { ToolOutputEntry, ToolPart } from "../foundation/types";
 import { jsonBody, textBody } from "../model-providers";
@@ -318,6 +319,22 @@ export async function runStreamingToolLoop(
     // R3-4:读流结束后统一检查 abort(此前仅 OpenAI 查)。流读取期间的 abort 只中断网络,
     // 若恰在"读完→执行工具"窗口停止,不查就会照常执行本轮工具。
     if (signal?.aborted) throw new DOMException("Generation stopped", "AbortError");
+
+    // 拦截泄漏到文本正文中的 DeepSeek DSML 工具调用标记（对齐安卓 GenerationLoop.kt / ISSUE-6）
+    if (result.toolCalls.length === 0 && hasDsmlToolDelimiters(result.text)) {
+      const { sanitizedText, extractedCalls } = extractDsmlToolCalls(result.text);
+      if (extractedCalls.length > 0) {
+        result.toolCalls = extractedCalls;
+        result.text = sanitizedText;
+        allContent = sanitizedText;
+        if (result.replay && typeof result.replay === "object" && "content" in result.replay) {
+          (result.replay as { content: string }).content = sanitizedText;
+        }
+        if (hooks.message) {
+          sanitizeMessageDsmlParts(hooks.message);
+        }
+      }
+    }
 
     if (result.toolCalls.length === 0) {
       if (adapter.finishReasoningOnFinal) finishReasoningParts(hooks.message!);

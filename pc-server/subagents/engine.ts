@@ -142,9 +142,46 @@ export class SubAgentProfileResolver {
 export function resolveSubAgentModel(
   modelResolution: ModelResolutionResult,
   profile: SubAgentProfile | null,
+  providers?: Provider[],
 ): ModelResolutionResult {
-  if (modelResolution.type === "inherit" && profile?.modelId) {
-    return { type: "resolved", modelId: profile.modelId };
+  if (modelResolution.type === "inherit" && profile) {
+    const targetSlug = (profile.modelSlug || "").trim().toLowerCase();
+    const targetId = profile.modelId;
+
+    if (targetSlug || targetId) {
+      if (providers && providers.length > 0) {
+        const enabledProviders = providers.filter((p) => p.enabled !== false);
+        const matched = enabledProviders
+          .flatMap((p) => p.models.map((m) => ({ provider: p, model: m })))
+          .find((item) => (targetId && item.model.id === targetId) || (targetSlug && item.model.modelId.toLowerCase() === targetSlug));
+
+        if (matched) {
+          return { type: "resolved", modelId: matched.model.id };
+        }
+
+        // 显式配置的模型如果在已禁用的 provider 中命中，或在已知模型中完全找不到：
+        // 拒绝静默回退（对齐安卓 SubAgentModelResolverTest / Refusing silent fallback）
+        const anyProviderMatch = providers
+          .flatMap((p) => p.models.map((m) => ({ provider: p, model: m })))
+          .find((item) => (targetId && item.model.id === targetId) || (targetSlug && item.model.modelId.toLowerCase() === targetSlug));
+
+        if (anyProviderMatch && anyProviderMatch.provider.enabled === false) {
+          return {
+            type: "failed",
+            message: `Refusing silent fallback: profile "${profile.name}" specifies model "${profile.modelSlug || profile.modelId}" but provider "${anyProviderMatch.provider.name}" is disabled`,
+          };
+        }
+
+        return {
+          type: "failed",
+          message: `Refusing silent fallback: profile "${profile.name}" specifies model "${profile.modelSlug || profile.modelId}" which is not available in enabled providers`,
+        };
+      }
+
+      if (profile.modelId) {
+        return { type: "resolved", modelId: profile.modelId };
+      }
+    }
   }
   return modelResolution;
 }
@@ -277,6 +314,7 @@ export class SubAgentEngine {
     const modelRes = resolveSubAgentModel(
       SubAgentModelResolver.resolve(request.modelId, providers),
       profile,
+      providers,
     );
     if (modelRes.type === "failed") {
       this.markTerminal(runId, "failed", modelRes.message);
@@ -356,10 +394,32 @@ When you have finished, end with one short paragraph in plain text that summaris
     persistConversation(subConversation);
     broadcastList();
 
+    let resolvedModelSlug: string | null = null;
+    let providerName: string | null = null;
+    let providerType: string | null = null;
+    let endpoint: string | null = null;
+    if (resolvedChatModelId) {
+      for (const p of providers) {
+        const m = p.models.find((model) => model.id === resolvedChatModelId);
+        if (m) {
+          resolvedModelSlug = m.modelId;
+          providerName = p.name;
+          providerType = (p as any).type ?? null;
+          endpoint = (p as any).baseUrl ?? null;
+          break;
+        }
+      }
+    }
+
     this.registry.update(runId, (r) => ({
       ...r,
       subConversationId: subConvId,
       modelId: resolvedChatModelId,
+      resolvedModelId: resolvedChatModelId,
+      resolvedModelSlug,
+      providerName,
+      providerType,
+      endpoint,
     }));
 
     // Register tool policy for this sub-agent conversation

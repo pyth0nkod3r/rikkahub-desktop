@@ -93,6 +93,23 @@ describe("轮次与返回值", () => {
     expect(events.some((e) => e.kind === "tool_result" && e.toolCallId === "tc1")).toBe(true);
   });
 
+  test("DeepSeek DSML 标记拦截并转为工具执行", async () => {
+    const executed: string[] = [];
+    const { hooks, events } = hooksFixture(async (call) => {
+      executed.push(call.function.name);
+      return { output: [] };
+    });
+    const dsmlText = '<｜tool calls begin｜><｜tool call begin｜>custom_dsml_tool<｜tool sep｜>{"q": "test"}<｜tool call end｜><｜tool calls end｜>';
+    const adapter = baseAdapter([
+      { text: dsmlText, toolCalls: [], replay: { content: dsmlText } },
+      noTools("工具执行完毕"),
+    ]);
+    const out = await runStreamingToolLoop(adapter, {}, assistant, undefined, hooks);
+    expect(out).toBe("工具执行完毕");
+    expect(executed).toEqual(["custom_dsml_tool"]);
+    expect(events.some((e) => e.kind === "tool_result")).toBe(true);
+  });
+
   test("OpenAI 模式：无换行拼接 + 循环层建卡(tool_call_created)", async () => {
     const { hooks, events } = hooksFixture();
     const adapter = baseAdapter([withTool("A"), noTools("B")]);
