@@ -8,6 +8,7 @@ import { Button } from "~/components/ui/button";
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "~/components/ui/dialog";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import api from "~/services/api";
+import { extractErrorMessage } from "~/lib/error";
 import { onHotkeyAction } from "~/lib/hotkey-events";
 import type { MessageSearchResultDto } from "~/types";
 
@@ -90,6 +91,7 @@ export function ConversationSearchButton({ onSelect }: ConversationSearchButtonP
     }
 
     const requestId = ++requestIdRef.current;
+    const abortController = new AbortController();
     const timer = window.setTimeout(() => {
       setSearching(true);
       setError(null);
@@ -97,6 +99,7 @@ export function ConversationSearchButton({ onSelect }: ConversationSearchButtonP
       api
         .get<MessageSearchResultDto[]>("conversations/search", {
           searchParams: { query: keyword },
+          signal: abortController.signal,
         })
         .then((data) => {
           if (requestId !== requestIdRef.current) return;
@@ -104,11 +107,8 @@ export function ConversationSearchButton({ onSelect }: ConversationSearchButtonP
         })
         .catch((searchError) => {
           if (requestId !== requestIdRef.current) return;
-          if (searchError instanceof Error) {
-            setError(searchError.message);
-          } else {
-            setError(t("conversation_search.search_failed"));
-          }
+          if (searchError?.name === "AbortError" || abortController.signal.aborted) return;
+          setError(extractErrorMessage(searchError, t("conversation_search.search_failed")));
         })
         .finally(() => {
           if (requestId !== requestIdRef.current) return;
@@ -118,6 +118,7 @@ export function ConversationSearchButton({ onSelect }: ConversationSearchButtonP
 
     return () => {
       window.clearTimeout(timer);
+      abortController.abort();
     };
   }, [open, query, t]);
 

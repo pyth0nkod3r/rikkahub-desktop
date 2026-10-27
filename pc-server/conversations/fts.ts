@@ -110,24 +110,32 @@ export function searchMessageFts(db: Database, rawQuery: string, limit = 200): M
   const query = rawQuery.trim();
   if (!query) return [];
   if (query.length >= 3) {
+    try {
+      const rows = db.prepare(
+        "SELECT conversation_id, node_id, message_id, snippet(pc_message_fts, 0, '[', ']', '…', 16) AS snip FROM pc_message_fts WHERE pc_message_fts MATCH ? LIMIT ?",
+      ).all(ftsPhrase(query), limit) as Array<{ conversation_id: string; node_id: string; message_id: string; snip: string }>;
+      return rows.map((row) => ({
+        conversationId: row.conversation_id,
+        nodeId: row.node_id,
+        messageId: row.message_id,
+        snippet: row.snip,
+      }));
+    } catch {
+      // MATCH 异常(如 tokenizer 短语解析失败)回退至 LIKE 兜底
+    }
+  }
+  // 1-2 字符或 MATCH 异常：LIKE 兜底（trigram 表的 LIKE 有索引优化；ESCAPE 显式声明反斜杠）
+  try {
     const rows = db.prepare(
-      "SELECT conversation_id, node_id, message_id, snippet(pc_message_fts, 0, '[', ']', '…', 16) AS snip FROM pc_message_fts WHERE pc_message_fts MATCH ? LIMIT ?",
-    ).all(ftsPhrase(query), limit) as Array<{ conversation_id: string; node_id: string; message_id: string; snip: string }>;
+      "SELECT text, conversation_id, node_id, message_id FROM pc_message_fts WHERE text LIKE ? ESCAPE '\\' LIMIT ?",
+    ).all(likePattern(query), limit) as Array<{ text: string; conversation_id: string; node_id: string; message_id: string }>;
     return rows.map((row) => ({
       conversationId: row.conversation_id,
       nodeId: row.node_id,
       messageId: row.message_id,
-      snippet: row.snip,
+      snippet: manualSnippet(row.text, query),
     }));
+  } catch {
+    return [];
   }
-  // 1-2 字符：LIKE 兜底（trigram 表的 LIKE 有索引优化；ESCAPE 显式声明反斜杠）
-  const rows = db.prepare(
-    "SELECT text, conversation_id, node_id, message_id FROM pc_message_fts WHERE text LIKE ? ESCAPE '\\' LIMIT ?",
-  ).all(likePattern(query), limit) as Array<{ text: string; conversation_id: string; node_id: string; message_id: string }>;
-  return rows.map((row) => ({
-    conversationId: row.conversation_id,
-    nodeId: row.node_id,
-    messageId: row.message_id,
-    snippet: manualSnippet(row.text, query),
-  }));
 }
