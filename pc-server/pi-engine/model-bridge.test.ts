@@ -273,6 +273,18 @@ describe("mapProviderModelToPi", () => {
     expect(resExplicit.mapping.config.models?.[0]?.maxTokens).toBe(384_000);
   });
 
+  it("第三方中转站开源模型(如 Agents-A1)未显式配置 maxTokens 时兜底钳位在 16384,防 upstream_request_rejected", () => {
+    const relay = makeProvider({ id: "p1", name: "Intern-ai", baseUrl: "https://discovery-api.intern-ai.org.cn/v1" });
+    const resClamped = mapProviderModelToPi(relay, model("Agents-A1"), { maxTokens: 64_000 });
+    if (!resClamped.ok) throw new Error(resClamped.reason);
+    expect(resClamped.mapping.config.models?.[0]?.maxTokens).toBe(16_384);
+
+    // 用户显式配置时不钳位
+    const resExplicit = mapProviderModelToPi(relay, model("Agents-A1"), { maxTokens: 64_000, explicitMaxTokens: true });
+    if (!resExplicit.ok) throw new Error(resExplicit.reason);
+    expect(resExplicit.mapping.config.models?.[0]?.maxTokens).toBe(64_000);
+  });
+
   it("MiniMax 与 StepFun 在第三方中转站未显式配置 maxTokens 时钳位在 128000,防 OneAPI 超限 Invalid request", () => {
     const relay = makeProvider({ id: "p1", name: "Kiosapi", baseUrl: "https://api.kiosapi.com/v1" });
     const mmClamped = mapProviderModelToPi(relay, model("minimax-m3.1-flash-free"), { maxTokens: 512_000 });

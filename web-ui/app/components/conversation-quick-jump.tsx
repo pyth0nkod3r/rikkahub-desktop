@@ -174,7 +174,7 @@ export const ConversationQuickJump = React.memo(function ConversationQuickJump({
     // 显示:52rem 阈值 = 48rem 消息列 + 4rem 让位空间。窄于此(分栏/小窗)整条隐藏,
     // 而非压在正文上——判据取容器宽度(@container/timeline 由消息区声明),视口断点在
     // 分栏下判不出单个窗格的真实宽度。
-    <div className={cn("pointer-events-none absolute inset-y-0 left-1/2 z-20 hidden w-full -translate-x-1/2 @min-[52rem]/timeline:block transition-all duration-200", widthClass)}>
+    <div className={cn("pointer-events-none absolute inset-y-0 left-1/2 z-20 hidden w-full -translate-x-1/2 @min-[52rem]/timeline:block transition-[max-width] duration-200", widthClass)}>
       <div className="pointer-events-auto absolute inset-y-4 -right-5 flex flex-col justify-center">
         <div
           ref={listRef}

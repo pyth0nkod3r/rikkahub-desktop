@@ -27,6 +27,7 @@ describe("classifyContextOverflowError", () => {
     "Gemini 400: The input token count (1189529) exceeds the maximum number of tokens allowed (1048576).",
     // OpenAI 兼容网关的通用表述
     "OpenRouter 400: This request exceeds the context window of the model.",
+    'Intern-ai 400: {"code":"upstream_request_rejected","message":"Bad Request","trace_id":"...","type":"invalid_request_error"}',
   ];
   test.each(overflowSamples)("命中:%s", (sample) => {
     expect(classifyContextOverflowError(new Error(sample))).toBe(CONTEXT_OVERFLOW_MESSAGE);

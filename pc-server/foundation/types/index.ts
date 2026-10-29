@@ -22,6 +22,10 @@ export interface Model {
   // 对齐安卓 Model.kt;web-ui 的 ProviderModel 是其 UI 视图形状。
   customHeaders?: JsonValue[];
   customBodies?: JsonValue[];
+  /** 上下文窗口限制(token 数量)。可来自服务商 models 端点探测或用户配置。 */
+  contextLength?: number;
+  /** 最大输出限制(token 数量)。可来自服务商 models 端点探测或用户配置。 */
+  maxTokens?: number;
   /** 每模型供应商覆写:非空时请求构建期整体替换父 provider(见 model-providers findModel)。 */
   providerOverwrite?: Partial<Provider> | null;
   /** 手动“+”添加的模型(modelId 用户可编辑);获取列表得到的模型无此标记,前端锁定 id。 */

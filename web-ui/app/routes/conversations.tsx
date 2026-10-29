@@ -807,6 +807,9 @@ const ConversationTimeline = React.memo(
           if (!map.has(model.id)) {
             map.set(model.id, model);
           }
+          if (model.modelId && !map.has(model.modelId)) {
+            map.set(model.modelId, model);
+          }
         }
       }
 
@@ -1219,9 +1222,40 @@ const ConversationTimeline = React.memo(
             increaseViewportBy={overscanExpanded ? 800 : 0}
             components={VIRTUOSO_COMPONENTS}
             itemContent={(index, { node, message }) => {
-              const model = message.modelId
-                ? (modelById.get(message.modelId) ?? fallbackModel)
-                : fallbackModel;
+              let model: ProviderModel | null = message.modelId ? (modelById.get(message.modelId) ?? null) : null;
+
+
+              const isStreamingCurrent = isGenerating && (index - nodesOffset === selectedNodeMessages.length - 1);
+              if (!model && Array.isArray(message.annotations)) {
+                const piAnnotation = message.annotations.find(
+                  (a: any) => a && (a.name === "pi-fidelity" || a["pi-fidelity"] || a.type === "pi-fidelity"),
+                ) as any;
+                const annotatedModel =
+                  piAnnotation?.["pi-fidelity"]?.model ??
+                  piAnnotation?.model ??
+                  piAnnotation?.payload?.model;
+                if (annotatedModel) {
+                  model = modelById.get(annotatedModel) ?? {
+                    id: annotatedModel,
+                    modelId: annotatedModel,
+                    displayName: annotatedModel,
+                    type: "CHAT",
+                  };
+                }
+              }
+              if (!model && message.modelId) {
+                model = {
+                  id: message.modelId,
+                  modelId: message.modelId,
+                  displayName: message.modelId,
+                  type: "CHAT",
+                };
+              }
+              if (!model && isStreamingCurrent) {
+                model = fallbackModel;
+              }
+
+
               // I-2:index 携带 firstItemIndex 全局偏移,换算回已加载数组的本地下标
               const localIndex = index - nodesOffset;
               const isLastLoaded = localIndex === selectedNodeMessages.length - 1;
@@ -1232,7 +1266,7 @@ const ConversationTimeline = React.memo(
                 <div
                   id={getConversationMessageAnchorId(message.id)}
                   className={cn(
-                    "mx-auto w-full px-4 py-2 scroll-mt-24 transition-all duration-200",
+                    "mx-auto w-full px-4 py-2 scroll-mt-24 transition-[max-width] duration-200",
                     widthClass,
                     contentClassName,
                     !knownMessageIds.has(message.id) && "rikkahub-animate-fade-in-up",

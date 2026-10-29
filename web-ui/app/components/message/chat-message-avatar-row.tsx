@@ -64,7 +64,7 @@ export function ChatMessageAvatarRow({
     );
   }
 
-  if (message.role !== "ASSISTANT" || !model) {
+  if (message.role !== "ASSISTANT") {
     return null;
   }
 
@@ -74,10 +74,10 @@ export function ChatMessageAvatarRow({
     return null;
   }
 
-  const useAssistantAvatar = assistant?.useAssistantAvatar === true;
+  const useAssistantAvatar = assistant?.useAssistantAvatar === true || !model;
   const defaultAssistantName = t("common:quick_jump.role_assistant", { defaultValue: "Assistant" });
   const assistantName = assistant?.name?.trim() || defaultAssistantName;
-  const modelName = getModelDisplayName(model.displayName, model.modelId) || defaultAssistantName;
+  const modelName = model ? (getModelDisplayName(model.displayName, model.modelId) || defaultAssistantName) : defaultAssistantName;
   const title = useAssistantAvatar ? assistantName : modelName;
 
   return (
@@ -88,7 +88,7 @@ export function ChatMessageAvatarRow({
             <UIAvatar name={assistantName} avatar={assistant?.avatar} className="size-9" />
           ) : (
             <AIIcon
-              name={model.modelId}
+              name={model?.modelId || ""}
               size={36}
               loading={loading}
               className="bg-secondary"

@@ -22,6 +22,8 @@ const CONTEXT_OVERFLOW_PATTERNS: RegExp[] = [
   /exceeds the maximum number of tokens/i,
   // 通用兜底:明确说"超过上下文窗口"的其他 OpenAI 兼容实现
   /exceed[s]? (the )?context window/i,
+  // 开源模型推理网关 (Intern-ai/TokenPlan/OneAPI): 上游因超上下文或 prompt+max_tokens 超限拒绝
+  /upstream_request_rejected/i,
 ];
 
 /** 命中"超上下文窗口"类报错时返回给用户的替换文案,否则 null(维持原报错)。 */

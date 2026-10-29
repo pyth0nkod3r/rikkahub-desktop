@@ -77,17 +77,42 @@ export function inferOutputModalities(modelId: string, raw?: any): string[] {
     : ["TEXT"];
 }
 
+function parsePositiveInt(val: any): number | undefined {
+  if (typeof val === "number" && Number.isFinite(val) && val > 0) return Math.floor(val);
+  if (typeof val === "string") {
+    const parsed = parseInt(val, 10);
+    if (!Number.isNaN(parsed) && parsed > 0) return parsed;
+  }
+  return undefined;
+}
+
 export function enrichModel(input: Model, raw?: any): Model {
   const abilities = uniqueStrings([...(input.abilities ?? []), ...inferModelAbilities(input.modelId)]);
   const inputModalities = uniqueStrings([...(input.inputModalities ?? []), ...inferInputModalities(input.modelId, raw)]);
   const outputModalities = uniqueStrings([...(input.outputModalities ?? []), ...inferOutputModalities(input.modelId, raw)]);
   const tools = (input.tools?.length ? input.tools : inferModelTools(input.modelId)) as JsonValue[];
+  const rawContextLength =
+    parsePositiveInt(raw?.context_length) ??
+    parsePositiveInt(raw?.max_context_length) ??
+    parsePositiveInt(raw?.context_window) ??
+    parsePositiveInt(raw?.max_model_len) ??
+    parsePositiveInt(raw?.input_modalities?.[0]?.supported_inputs?.max_context_length?.value) ??
+    parsePositiveInt(raw?.inputTokenLimit);
+  const rawMaxTokens =
+    parsePositiveInt(raw?.max_tokens) ??
+    parsePositiveInt(raw?.max_output_tokens) ??
+    parsePositiveInt(raw?.output_modalities?.[0]?.max_length?.value) ??
+    parsePositiveInt(raw?.outputTokenLimit);
+  const contextLength = input.contextLength ?? rawContextLength;
+  const maxTokens = input.maxTokens ?? rawMaxTokens;
   return {
     ...input,
     abilities,
     inputModalities: inputModalities.length ? inputModalities : ["TEXT"],
     outputModalities: outputModalities.length ? outputModalities : ["TEXT"],
     tools,
+    ...(typeof contextLength === "number" && contextLength > 0 ? { contextLength } : {}),
+    ...(typeof maxTokens === "number" && maxTokens > 0 ? { maxTokens } : {}),
   };
 }
 
@@ -699,13 +724,22 @@ export function customFormValue(value: unknown) {
 
 export function normalizeFetchedModels(providerItem: Provider, raw: any): Model[] {
   const items = providerItem.type === "google" ? raw.models ?? [] : raw.data ?? raw.models ?? [];
+  const existingByModelId = new Map<string, Model>();
+  for (const m of providerItem.models ?? []) {
+    if (m.modelId) existingByModelId.set(m.modelId, m);
+  }
   const models = (Array.isArray(items) ? items : [])
     .map((item: any) => {
       const rawId = String(item.id ?? item.name ?? item.model ?? "").trim();
       const modelId = rawId.replace(/^models\//, "");
       if (!modelId) return null;
       const displayName = String(item.display_name ?? item.displayName ?? item.name ?? modelId).replace(/^models\//, "");
-      return enrichModel(model(modelId, displayName || modelId), item);
+      const existing = existingByModelId.get(modelId);
+      const base = model(modelId, displayName || modelId);
+      if (existing?.id) base.id = existing.id;
+      if (existing?.contextLength && !base.contextLength) base.contextLength = existing.contextLength;
+      if (existing?.maxTokens && !base.maxTokens) base.maxTokens = existing.maxTokens;
+      return enrichModel(base, item);
     })
     .filter(Boolean) as Model[];
   const byId = new Map<string, Model>();

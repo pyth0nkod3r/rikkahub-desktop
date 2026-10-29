@@ -229,6 +229,8 @@ export interface ProviderModel {
   tools?: BuiltInTool[];
   customHeaders?: CustomHeader[];
   customBodies?: CustomBody[];
+  contextLength?: number;
+  maxTokens?: number;
   /**
    * Per-model provider override. `null` / `undefined` means "use the parent provider".
    * When set, the entire upstream request (baseUrl, apiKey, etc.) goes through this

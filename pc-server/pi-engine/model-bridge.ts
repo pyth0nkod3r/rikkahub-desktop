@@ -30,6 +30,7 @@ import {
   isDashScopeEffortQwenModel,
   isKimiK3Model,
   isOfficialMiniMaxHost,
+  isOfficialOpenAiHost,
   isOfficialStepFunHost,
   isSiliconFlowEffortModel,
   isZhipuEffortModel,
@@ -665,12 +666,17 @@ export function mapProviderModelToPi(provider: Provider, model: Model, limits?: 
   const isDeepSeekRelay = host !== "api.deepseek.com" && /deepseek/i.test(model.modelId);
   const isMiniMaxRelay = !isOfficialMiniMaxHost(host) && /minimax/i.test(model.modelId);
   const isStepFunRelay = !isOfficialStepFunHost(host) && /step/i.test(model.modelId);
+  const isOfficialHost = isOfficialMiniMaxHost(host) || isOfficialStepFunHost(host) || isOfficialOpenAiHost(host);
+  const relayCappedTokens =
+    !isOfficialHost && !limits?.explicitMaxTokens && rawMaxTokens > 16_384
+      ? 16_384
+      : rawMaxTokens;
   const maxTokens =
     isDeepSeekRelay && !limits?.explicitMaxTokens && rawMaxTokens > 16_384
       ? 16_384
       : (isMiniMaxRelay || isStepFunRelay) && !limits?.explicitMaxTokens && rawMaxTokens > 128_000
         ? 128_000
-        : rawMaxTokens;
+        : relayCappedTokens;
 
   const config: ProviderConfigInput = {
     name: provider.name,
