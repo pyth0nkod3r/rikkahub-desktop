@@ -29,6 +29,26 @@ import type {
 // other without losing the global-scope memory records.
 export const GLOBAL_MEMORY_ID = "__global__";
 
+let memoryStoreChangeListeners: Array<() => void> = [];
+
+export function onMemoryStoreChange(listener: () => void): () => void {
+  memoryStoreChangeListeners.push(listener);
+  return () => {
+    memoryStoreChangeListeners = memoryStoreChangeListeners.filter((l) => l !== listener);
+  };
+}
+
+export function notifyMemoryStoreChange(): void {
+  for (const listener of memoryStoreChangeListeners) {
+    try {
+      listener();
+    } catch {
+      // best-effort
+    }
+  }
+}
+
+
 // pending 队列容量上限（M7）。超限拒绝入队，工具返回 overflow，徽章变体高亮提醒用户处理积压。
 const PENDING_MAX = 100;
 
@@ -121,6 +141,7 @@ export const memoryStore = {
         version: 1,
         assistants: this.assistantGroups,
       });
+      notifyMemoryStoreChange();
       await this.writeJsonAsync(pendingMemoryPath, {
         version: 1,
         pending: this.pending,
@@ -421,6 +442,9 @@ export const memoryStore = {
   async resolvePending(pendingId: string, action: "global" | "assistant" | "discard", contentOverride?: string): Promise<{ resolved: boolean; memory?: MemoryEntry }> {
     const idx = this.pending.findIndex((p: PendingEntry) => p.pendingId === pendingId);
     if (idx < 0) return { resolved: false };
+    if (action === "global" && !state?.settings?.memorySettings?.globalEnabled) {
+      return { resolved: false };
+    }
     const entry = this.pending[idx];
     const content = String(contentOverride ?? entry.content).trim();
     this.pending.splice(idx, 1);
@@ -531,24 +555,81 @@ export const memoryStore = {
 };
 
 export function memoriesForAssistant(assistant: Assistant): MemoryEntry[] {
-  // 叠加注入（1.3.2）：助手层（assistant.enableMemory）+ 全局层（memorySettings.globalEnabled）。
-  // enableMemory 只控制助手层、globalEnabled 只控制全局层，两者独立叠加——助手关记忆时仍可见
-  // 全局层（§6.5 联动矩阵），模型侧完全不感知层级存在（产品决策核心：叠加对模型透明）。
-  // 替代旧的 useGlobalMemory 二选一——useGlobalMemory 字段废弃，运行时不再读（老值保留兼容）。
-  const assistantMems = assistant.enableMemory ? memoryStore.getAssistantMemories(assistant.id) : [];
-  const globalMems = state.settings.memorySettings.globalEnabled
-    ? memoryStore.getGlobalMemories()
-    : [];
-  return [...globalMems, ...assistantMems].sort((a, b) => b.updatedAt - a.updatedAt);
+  const globalEnabled = state?.settings?.memorySettings?.globalEnabled === true;
+  const assistantEnabled = assistant.enableMemory === true;
+
+  // 1. Both disabled -> return empty
+  if (!globalEnabled && !assistantEnabled) {
+    return [];
+  }
+
+  // 2. Global Memory is toggled off -> strictly restricted to Assistant memory (if enabled)
+  if (!globalEnabled) {
+    return assistantEnabled
+      ? [...memoryStore.getAssistantMemories(assistant.id)].sort((a, b) => b.updatedAt - a.updatedAt)
+      : [];
+  }
+
+  // 3. Global Memory is turned on, but Assistant memory is toggled off -> access Global memory
+  if (!assistantEnabled) {
+    return [...memoryStore.getGlobalMemories()].sort((a, b) => b.updatedAt - a.updatedAt);
+  }
+
+  // 4. Both toggled on -> Global memory prevails against assistant memory and is the preferred memory to use.
+  // Global memories come first (highest priority/precedence), followed by assistant memories.
+  const globalMems = [...memoryStore.getGlobalMemories()].sort((a, b) => b.updatedAt - a.updatedAt);
+  const assistantMems = [...memoryStore.getAssistantMemories(assistant.id)].sort((a, b) => b.updatedAt - a.updatedAt);
+  return [...globalMems, ...assistantMems];
 }
 
-export function buildMemoryPrompt(assistant: Assistant) {
-  const memories = memoriesForAssistant(assistant).map((memory) => ({ id: memory.id, content: memory.content }));
-  if (memories.length === 0) return "";
+export function buildMemoryPrompt(assistant: Assistant): string {
+  const globalEnabled = state?.settings?.memorySettings?.globalEnabled === true;
+  const assistantEnabled = assistant.enableMemory === true;
+
+  if (!globalEnabled && !assistantEnabled) return "";
+
+  const globalMems = globalEnabled
+    ? [...memoryStore.getGlobalMemories()].sort((a, b) => b.updatedAt - a.updatedAt)
+    : [];
+  const assistantMems = assistantEnabled
+    ? [...memoryStore.getAssistantMemories(assistant.id)].sort((a, b) => b.updatedAt - a.updatedAt)
+    : [];
+
+  if (globalMems.length === 0 && assistantMems.length === 0) return "";
+
+  let memoryBody = "";
+  if (globalEnabled && assistantEnabled && globalMems.length > 0 && assistantMems.length > 0) {
+    // Both toggled on: Global memory prevails against assistant memory and is preferred.
+    const globalEntries = globalMems
+      .map((m) => `#### [Global Memory #${m.id}] (Prevailing / Preferred)\n${m.content.trim()}`)
+      .join("\n\n");
+    const assistantEntries = assistantMems
+      .map((m) => `#### [Assistant Memory #${m.id}]\n${m.content.trim()}`)
+      .join("\n\n");
+
+    memoryBody = `### Global Directives (Prevailing Priority)\n${globalEntries}\n\n### Assistant Directives\n${assistantEntries}`;
+  } else if (globalMems.length > 0) {
+    memoryBody = globalMems
+      .map((m) => `### Memory [ID ${m.id}]\n${m.content.trim()}`)
+      .join("\n\n");
+  } else {
+    memoryBody = assistantMems
+      .map((m) => `### Memory [ID ${m.id}]\n${m.content.trim()}`)
+      .join("\n\n");
+  }
+
+  const precedenceNotice = (globalEnabled && assistantEnabled && globalMems.length > 0 && assistantMems.length > 0)
+    ? "\nWhen global memory and assistant memory are both active, Global Memory PREVAILS against assistant memory and is the preferred authority to follow."
+    : "";
+
   return `
-**Memories**
-These are memories you can reference in future conversations.
-${JSON.stringify(memories, null, 2)}
+<user_memory>
+## User Memory & Standing Operational Directives
+The following memories persist across conversations. They contain mandatory standing directives, orchestration doctrines, role boundaries, and user preferences.${precedenceNotice}
+You MUST strictly adhere to and proactively apply all relevant directives below across all tasks without waiting to be explicitly reminded or prompted:
+
+${memoryBody}
+</user_memory>
 `.trim();
 }
 

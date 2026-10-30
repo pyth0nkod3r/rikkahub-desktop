@@ -32,6 +32,9 @@ export async function handleMemoryRoutes(request: Request, _url: URL, path: stri
       if (action !== "global" && action !== "assistant" && action !== "discard") {
         return error("action must be one of global/assistant/discard", 400);
       }
+      if (action === "global" && !state.settings.memorySettings.globalEnabled) {
+        return error("Global memory is disabled", 400);
+      }
       const result = await memoryStore.resolvePending(pendingId, action, body.content);
       if (!result.resolved) return error(`Pending ${pendingId} not found`, 404);
       invalidateContextSnapshots();
@@ -64,6 +67,9 @@ export async function handleMemoryRoutes(request: Request, _url: URL, path: stri
     return json({ memories: memoryStore.getGlobalMemories() });
   }
   if (path === "memory/global" && request.method === "POST") {
+    if (!state.settings.memorySettings.globalEnabled) {
+      return error("Global memory is disabled", 400);
+    }
     const body = await readJson<{ id?: number; content?: string }>(request);
     const content = String(body.content ?? "").trim();
     if (!content) return error("content is required", 400);
@@ -115,6 +121,9 @@ export async function handleMemoryRoutes(request: Request, _url: URL, path: stri
   }
   // 批量编辑(整体替换,带 schema 校验 + .bak 备份,§9.3)。校验失败返回 400,不落盘。
   if (path === "memory/batch/global" && request.method === "POST") {
+    if (!state.settings.memorySettings.globalEnabled) {
+      return error("Global memory is disabled", 400);
+    }
     const body = await readJson<{ memories?: unknown }>(request);
     try {
       memoryStore.replaceGlobalMemories(body.memories);

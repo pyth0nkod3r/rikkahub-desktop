@@ -105,6 +105,7 @@ function stableGuidanceLines(): string {
     `To install a new skill for the user, create \`${dir}/<skill-name>/SKILL.md\` (with name and description frontmatter). It becomes available once enabled in the app settings.`,
     "Some tool calls require explicit user approval before they run. A denied call returns an error with the reason — respect the decision and adjust your approach instead of retrying the same call.",
     "For web search and external retrieval, always prioritize calling the configured search_web and scrape_web tools. Do NOT default to shell scripts (such as python with ddgs or curl) unless the built-in search tools are unavailable or insufficient.",
+    "When standing instructions, user memories, or orchestration doctrines specify delegating tasks to sub-agents (e.g. builder, critic, planner, researcher, designer, merger), you MUST invoke `subagent_dispatch` rather than executing all substantive work inline yourself. Act strictly as an orchestrator according to standing memory directives.",
   ].join("\n");
 }
 

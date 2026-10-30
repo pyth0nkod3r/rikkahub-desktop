@@ -11,7 +11,7 @@
 // (enableMemory/globalEnabled/enableRecentChatsReference)编进快照键,切开关即
 // 换键自动重建;进程重启自然重建——厂商缓存 TTL 分钟~小时级,跨重启本就冷。
 import type { Assistant } from "../foundation/types";
-import { buildMemoryPrompt, buildRecentChatsPrompt } from "../memory";
+import { buildMemoryPrompt, buildRecentChatsPrompt, onMemoryStoreChange } from "../memory";
 import { state } from "../persistence/json-store";
 
 /** [记忆块, 最近会话块](可为空串)。 */
@@ -19,6 +19,10 @@ export type ContextBlocks = readonly [string, string];
 
 const MAX_SNAPSHOTS = 200;
 const snapshots = new Map<string, ContextBlocks>();
+
+onMemoryStoreChange(() => {
+  snapshots.clear();
+});
 
 function snapshotKey(assistant: Assistant, conversationId: string): string {
   // state 在启动装载后才可用;编码只在运行期发生,这里的可选链仅为单测隔离兜底。

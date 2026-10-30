@@ -32,7 +32,7 @@ import { executeTelegramTool, isTelegramTool } from "./telegram-tools";
  *  - always_global + 全局层启用 → 直接存全局层
  *  - ask(默认)、或 always_* 但对应层未启用(M3 矛盾组合降级)→ 进待确认队列
  *  ★ 返回值不含 pending: true —— 生成不在此暂停(区别于 ask_user 的审批挂起机制,§6.2)。 */
-async function runSaveMemoryTool(
+export async function runSaveMemoryTool(
   assistant: Assistant,
   args: Record<string, JsonValue>,
   context?: { conversationId?: string; conversationTitle?: string; messageNodeId?: string },
@@ -40,17 +40,46 @@ async function runSaveMemoryTool(
   const content = String(args.content ?? "").trim();
   if (!content) throw new Error("content is required");
   const ms = state.settings.memorySettings;
+  const globalEnabled = ms.globalEnabled === true;
+  const assistantEnabled = assistant.enableMemory === true;
+
+  if (!globalEnabled && !assistantEnabled) {
+    throw new Error("Memory is disabled");
+  }
+
   const strategy = ms.writeStrategy;
 
-  if (strategy === "always_assistant" && assistant.enableMemory) {
-    const mem = memoryStore.addMemory({ scope: "assistant", assistantId: assistant.id, content, source: "ai" });
-    broadcastMemoryUpdate();
-    return { status: "saved", scope: "assistant", content: mem.content };
+  if (strategy === "always_global") {
+    if (globalEnabled) {
+      const mem = memoryStore.addMemory({ scope: "global", content, source: "ai" });
+      broadcastMemoryUpdate();
+      return { status: "saved", scope: "global", content: mem.content };
+    }
+    // Global memory is toggled off -> strictly restricted to assistant memory
+    if (assistantEnabled) {
+      const mem = memoryStore.addMemory({ scope: "assistant", assistantId: assistant.id, content, source: "ai" });
+      broadcastMemoryUpdate();
+      return { status: "saved", scope: "assistant", content: mem.content };
+    }
   }
-  if (strategy === "always_global" && ms.globalEnabled) {
-    const mem = memoryStore.addMemory({ scope: "global", content, source: "ai" });
-    broadcastMemoryUpdate();
-    return { status: "saved", scope: "global", content: mem.content };
+
+  if (strategy === "always_assistant") {
+    // If both are toggled on and assistant specifies useGlobalMemory, global memory prevails
+    if (globalEnabled && assistant.useGlobalMemory) {
+      const mem = memoryStore.addMemory({ scope: "global", content, source: "ai" });
+      broadcastMemoryUpdate();
+      return { status: "saved", scope: "global", content: mem.content };
+    }
+    if (assistantEnabled) {
+      const mem = memoryStore.addMemory({ scope: "assistant", assistantId: assistant.id, content, source: "ai" });
+      broadcastMemoryUpdate();
+      return { status: "saved", scope: "assistant", content: mem.content };
+    }
+    if (globalEnabled) {
+      const mem = memoryStore.addMemory({ scope: "global", content, source: "ai" });
+      broadcastMemoryUpdate();
+      return { status: "saved", scope: "global", content: mem.content };
+    }
   }
 
   // 进待确认队列。context 从 executeToolCall 透传(流式路径含当前会话 + 节点),用于前端确认

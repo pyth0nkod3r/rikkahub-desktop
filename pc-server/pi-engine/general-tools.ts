@@ -73,6 +73,20 @@ function toGeneralPiToolResult(entries: ToolOutputEntry[]): PiToolResult {
   } as PiToolResult;
 }
 
+
+const GENERAL_TOOL_SNIPPETS: Record<string, string> = {
+  subagent_dispatch:
+    "Dispatch a clean-context specialist sub-agent (builder, critic, planner, researcher, designer, merger) for independent, multi-step, or substantive tasks",
+  subagent_reinject: "Resume/continue a timed-out or interrupted sub-agent run with the same run ID",
+  subagent_get: "Check status and output of a running or completed background sub-agent",
+};
+
+const GENERAL_TOOL_GUIDELINES: Record<string, string[]> = {
+  subagent_dispatch: [
+    "When standing instructions, user memories, or orchestration doctrines specify delegating tasks or using sub-agents (builder, critic, planner, researcher, designer), invoke subagent_dispatch rather than executing the work inline yourself.",
+  ],
+};
+
 function buildGeneralTool(
   declaration: { name: string; description: string; parameters: Record<string, unknown> },
   ctx: PiGeneralToolsContext,
@@ -82,9 +96,8 @@ function buildGeneralTool(
     name,
     label: name,
     description: declaration.description,
-    // 无 promptSnippet:不进 pi 系统提示词 Available tools 清单(那里只该有编码工具,
-    // 引擎契约原文已有"you may have access to other custom tools"兜底句)——与聊天
-    // 引擎"通用工具只出现在 API tools 数组"同构。
+    ...(GENERAL_TOOL_SNIPPETS[name] ? { promptSnippet: GENERAL_TOOL_SNIPPETS[name] } : {}),
+    ...(GENERAL_TOOL_GUIDELINES[name] ? { promptGuidelines: GENERAL_TOOL_GUIDELINES[name] } : {}),
     parameters: declaration.parameters as unknown as PiToolParameters,
     // 与工作区工具同为 sequential:审批卡一次一张,MCP 慢调用不并发抢跑。
     executionMode: "sequential",

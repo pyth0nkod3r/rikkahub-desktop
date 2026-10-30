@@ -125,6 +125,7 @@ export function MemoryBadge() {
 
   // 批量按钮文案/状态,顺序统一为 全局-助手-丢弃(与单条一致)。
   // variant=secondary 与单条 default 区分,提示用户"这是批量操作"。
+  const isGlobalEnabled = snapshot.globalEnabled !== false;
   const batchDisabled = selected.size === 0 || saving === "batch";
   const renderBatchButton = (
     action: "global" | "assistant" | "discard",
@@ -136,7 +137,8 @@ export function MemoryBadge() {
       variant={variant}
       size="sm"
       className="flex-1"
-      disabled={batchDisabled}
+      disabled={batchDisabled || (action === "global" && !isGlobalEnabled)}
+      title={action === "global" && !isGlobalEnabled ? t("settings:memory.global_disabled", "Global memory is disabled") : undefined}
       onClick={() => handleBatchSave(action)}
     >
       {saving === "batch" ? (
@@ -254,9 +256,10 @@ export function MemoryBadge() {
                   <div className="flex gap-2">
                     <Button
                       size="sm"
-                      variant="default"
+                      variant={isGlobalEnabled ? "default" : "secondary"}
                       className="flex-1"
-                      disabled={saving === entry.pendingId}
+                      disabled={saving === entry.pendingId || !isGlobalEnabled}
+                      title={!isGlobalEnabled ? t("settings:memory.global_disabled", "Global memory is disabled") : undefined}
                       onClick={(e) => {
                         const textarea = e.currentTarget.parentElement?.parentElement?.querySelector("textarea");
                         handleSave(entry.pendingId, "global", textarea?.value || entry.content);
@@ -271,7 +274,7 @@ export function MemoryBadge() {
                     </Button>
                     <Button
                       size="sm"
-                      variant="default"
+                      variant={!isGlobalEnabled ? "default" : "secondary"}
                       className="flex-1"
                       disabled={saving === entry.pendingId || assistantGone}
                       title={assistantGone ? t("memory.save_assistant_disabled") : undefined}
