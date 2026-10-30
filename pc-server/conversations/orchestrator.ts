@@ -49,7 +49,7 @@ import {
 } from "../inference-engine/providers";
 import { buildInteractionsRequestBody, streamInteractionsChatWithTools } from "../inference-engine/interactions";
 import { contextWindowFor, requiredOutputCap } from "../model-providers/model-limits";
-import { inferContextWindowFallback } from "../pi-engine/model-bridge";
+import { DEFAULT_CONTEXT_WINDOW, inferContextWindowFallback } from "../pi-engine/model-bridge";
 import {
   finishReasoningParts,
   finishToolParts,
@@ -752,11 +752,10 @@ async function runPostGenerationTasks(conversationId: string, snapshot: Conversa
  *  (它会恒发上限字段),所以这里同样属于"协议逼我给数"的场合。 */
 function piModelLimitsFor(provider: Provider, model: Model, assistant: Assistant, conversation?: Conversation) {
   const modelContext = typeof model.contextLength === "number" && model.contextLength > 0 ? model.contextLength : null;
-  let contextWindow =
-    modelContext ??
-    contextWindowFor(modelsDevCache, provider, model.modelId) ??
-    inferContextWindowFallback(model.modelId);
-  if (conversation) {
+  const catalogWindow = contextWindowFor(modelsDevCache, provider, model.modelId);
+  const fallbackWindow = inferContextWindowFallback(model.modelId);
+  let contextWindow = modelContext ?? catalogWindow ?? fallbackWindow;
+  if (conversation && modelContext == null && catalogWindow == null && fallbackWindow === DEFAULT_CONTEXT_WINDOW) {
     let maxObservedTokens = 0;
     for (const msg of selectedConversationMessages(conversation)) {
       const tokens = msg.usage?.promptTokens ?? 0;

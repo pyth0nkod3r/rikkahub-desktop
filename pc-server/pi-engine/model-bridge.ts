@@ -96,6 +96,8 @@ export function inferContextWindowFallback(modelId: string): number {
   if (/(\b|[-_])200k(\b|[-_])/i.test(lower)) return 200_000;
   if (/(\b|[-_])256k(\b|[-_])/i.test(lower)) return 262_144;
   if (/(\b|[-_])512k(\b|[-_])/i.test(lower)) return 524_288;
+  // MiniMax 现役开源/中转模型（如 minimax-m3.1-flash, minimax-text-01 等）窗口为 256K
+  if (/minimax/i.test(lower)) return 262_144;
   return DEFAULT_CONTEXT_WINDOW;
 }
 // 输出上限兜底与聊天引擎同源(DEFAULT_OUTPUT_TOKENS,方言单源)。注意 pi 的
@@ -666,7 +668,7 @@ export function mapProviderModelToPi(provider: Provider, model: Model, limits?: 
   const isDeepSeekRelay = host !== "api.deepseek.com" && /deepseek/i.test(model.modelId);
   const isMiniMaxRelay = !isOfficialMiniMaxHost(host) && /minimax/i.test(model.modelId);
   const isStepFunRelay = !isOfficialStepFunHost(host) && /step/i.test(model.modelId);
-  const isOfficialHost = isOfficialMiniMaxHost(host) || isOfficialStepFunHost(host) || isOfficialOpenAiHost(host);
+  const isOfficialHost = isOfficialMiniMaxHost(host) || isOfficialStepFunHost(host) || isOfficialOpenAiHost(host) || host === "127.0.0.1" || host === "localhost";
   const relayCappedTokens =
     !isOfficialHost && !limits?.explicitMaxTokens && rawMaxTokens > 16_384
       ? 16_384

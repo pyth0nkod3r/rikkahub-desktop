@@ -208,8 +208,14 @@ export const OUTPUT_LIMIT_FACTS: readonly OutputLimitFact[] = [
     source: "platform.kimi.com/docs/api/chat「此值为期望返回的 Token 长度,默认 131072」(2026-09-17 直抓)",
   },
   {
-    // MiniMax M3:输出上限 512K(1M 上下文内保证最低 512K 输出)。
-    match: (id) => /minimax[-._/]?m[-._]?3/i.test(id),
+    // MiniMax M3.1 Flash / Flash 系:输出上限 16K,窗口 256K。
+    match: (id) => /minimax.*flash/i.test(id),
+    cap: 16_384,
+    source: "minimax.io / platform.minimax.io「MiniMax Flash 系列最大输出 16,384 · 256K context」(2026-10-30 直抓)",
+  },
+  {
+    // MiniMax M3:输出上限 512K(1M 上下文内保证最低 512K 输出)。排除 Flash 系。
+    match: (id) => /minimax[-._/]?m[-._]?3/i.test(id) && !/flash/i.test(id),
     cap: 512_000,
     source: "minimax.io/models/text/m3 + platform.minimax.io「max_tokens Max: 512000 · 1M context」(2026-09-17 直抓)",
   },

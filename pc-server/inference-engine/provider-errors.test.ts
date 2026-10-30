@@ -28,6 +28,7 @@ describe("classifyContextOverflowError", () => {
     // OpenAI 兼容网关的通用表述
     "OpenRouter 400: This request exceeds the context window of the model.",
     'Intern-ai 400: {"code":"upstream_request_rejected","message":"Bad Request","trace_id":"...","type":"invalid_request_error"}',
+    'Kiosapi 400: {"message":"Invalid request","type":"bad_response_status_code","param":"","code":"bad_response_status_code"}',
   ];
   test.each(overflowSamples)("命中:%s", (sample) => {
     expect(classifyContextOverflowError(new Error(sample))).toBe(CONTEXT_OVERFLOW_MESSAGE);
