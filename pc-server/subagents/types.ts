@@ -37,6 +37,8 @@ export interface SubAgentProfile {
   description: string;
   systemPrompt: string;
   modelId: string | null;
+  modelSlug?: string | null;
+  providerId?: string | null;
   enabled: boolean;
   tools: string[];
   capabilities: string[];

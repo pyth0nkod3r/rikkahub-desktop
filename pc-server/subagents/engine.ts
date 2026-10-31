@@ -145,43 +145,81 @@ export function resolveSubAgentModel(
   providers?: Provider[],
 ): ModelResolutionResult {
   if (modelResolution.type === "inherit" && profile) {
-    const targetSlug = (profile.modelSlug || "").trim().toLowerCase();
-    const targetId = profile.modelId;
+    if (!providers || providers.length === 0) {
+      if (profile.modelId) return { type: "resolved", modelId: profile.modelId };
+      return modelResolution;
+    }
 
-    if (targetSlug || targetId) {
-      if (providers && providers.length > 0) {
-        const enabledProviders = providers.filter((p) => p.enabled !== false);
-        const matched = enabledProviders
-          .flatMap((p) => p.models.map((m) => ({ provider: p, model: m })))
-          .find((item) => (targetId && item.model.id === targetId) || (targetSlug && item.model.modelId.toLowerCase() === targetSlug));
-
-        if (matched) {
-          return { type: "resolved", modelId: matched.model.id };
+    const enabledProviders = providers.filter((p) => p.enabled !== false);
+    const chatCandidates: Array<{ provider: Provider; model: Model }> = [];
+    for (const p of enabledProviders) {
+      for (const m of p.models) {
+        if (m.type === "CHAT" || !m.type) {
+          chatCandidates.push({ provider: p, model: m });
         }
-
-        // 显式配置的模型如果在已禁用的 provider 中命中，或在已知模型中完全找不到：
-        // 拒绝静默回退（对齐安卓 SubAgentModelResolverTest / Refusing silent fallback）
-        const anyProviderMatch = providers
-          .flatMap((p) => p.models.map((m) => ({ provider: p, model: m })))
-          .find((item) => (targetId && item.model.id === targetId) || (targetSlug && item.model.modelId.toLowerCase() === targetSlug));
-
-        if (anyProviderMatch && anyProviderMatch.provider.enabled === false) {
-          return {
-            type: "failed",
-            message: `Refusing silent fallback: profile "${profile.name}" specifies model "${profile.modelSlug || profile.modelId}" but provider "${anyProviderMatch.provider.name}" is disabled`,
-          };
-        }
-
-        return {
-          type: "failed",
-          message: `Refusing silent fallback: profile "${profile.name}" specifies model "${profile.modelSlug || profile.modelId}" which is not available in enabled providers`,
-        };
-      }
-
-      if (profile.modelId) {
-        return { type: "resolved", modelId: profile.modelId };
       }
     }
+
+    const candidateLine = (c: { provider: Provider; model: Model }) =>
+      `${c.model.displayName || c.model.modelId} (${c.provider.name}) -> ${c.model.id}`;
+
+    // Tier 1: Exact UUID match in enabled providers
+    if (profile.modelId) {
+      const byUuid = chatCandidates.find((c) => c.model.id === profile.modelId);
+      if (byUuid) return { type: "resolved", modelId: byUuid.model.id };
+    }
+
+    // Tier 2: Provider affinity match (resilience against catalog refresh where model UUID changed)
+    const targetSlug = (profile.modelSlug || "").trim().toLowerCase();
+    if (profile.providerId && targetSlug) {
+      const provider = enabledProviders.find((p) => p.id === profile.providerId);
+      const model = provider?.models.find(
+        (m) => (m.type === "CHAT" || !m.type) && m.modelId.toLowerCase() === targetSlug,
+      );
+      if (model) return { type: "resolved", modelId: model.id };
+    }
+
+    // Tier 3 & 4: Model slug matching across enabled providers
+    if (targetSlug) {
+      const bySlug = chatCandidates.filter((c) => c.model.modelId.toLowerCase() === targetSlug);
+      if (bySlug.length === 1) {
+        return { type: "resolved", modelId: bySlug[0].model.id };
+      }
+      if (bySlug.length > 1) {
+        return {
+          type: "failed",
+          message:
+            `Sub-agent profile '${profile.name}' configured model '${profile.modelSlug}' is ambiguous ` +
+            `across multiple providers (${bySlug.length} matches):\n` +
+            bySlug.map(candidateLine).join("\n") +
+            `\nSelect a specific provider in Settings → Sub-agents.`,
+        };
+      }
+    }
+
+    // Explicitly configured model not available or provider disabled
+    const anyCandidates: Array<{ provider: Provider; model: Model }> = [];
+    for (const p of providers) {
+      for (const m of p.models) {
+        anyCandidates.push({ provider: p, model: m });
+      }
+    }
+    const anyMatch = anyCandidates.find(
+      (c) =>
+        (profile.modelId && c.model.id === profile.modelId) ||
+        (targetSlug && c.model.modelId.toLowerCase() === targetSlug),
+    );
+    if (anyMatch && anyMatch.provider.enabled === false) {
+      return {
+        type: "failed",
+        message: `Refusing silent fallback: profile "${profile.name}" specifies model "${profile.modelSlug || profile.modelId}" but provider "${anyMatch.provider.name}" is disabled`,
+      };
+    }
+
+    return {
+      type: "failed",
+      message: `Sub-agent profile '${profile.name}' configured model (${profile.modelSlug || profile.modelId}) is not available or its provider is disabled. Refusing silent fallback.`,
+    };
   }
   return modelResolution;
 }
@@ -348,10 +386,12 @@ export class SubAgentEngine {
     let workspaceId: string | null = null;
     let workspaceCwd: string | null = null;
     let effectiveAssistantId = parentAssistantId?.trim();
+    let inheritedModelId: string | null = null;
     if (parentChatId) {
       const parentConv = getConversation(parentChatId);
       if (parentConv) {
         if (!effectiveAssistantId) effectiveAssistantId = parentConv.assistantId;
+        inheritedModelId = parentConv.chatModelId ?? null;
         if (parentConv.workspaceId) {
           workspaceId = parentConv.workspaceId;
           workspaceCwd = parentConv.workspaceCwd ?? null;
@@ -361,6 +401,15 @@ export class SubAgentEngine {
     if (!effectiveAssistantId) {
       effectiveAssistantId = state?.settings?.assistantId ?? "";
     }
+    if (!inheritedModelId) {
+      try {
+        const parentAssistant = findAssistant(effectiveAssistantId);
+        inheritedModelId = parentAssistant.chatModelId ?? state?.settings?.chatModelId ?? null;
+      } catch {
+        inheritedModelId = state?.settings?.chatModelId ?? null;
+      }
+    }
+    const finalSubModelId = resolvedChatModelId ?? inheritedModelId;
 
     // Create isolated conversation
     const subConvId = newId();
@@ -368,7 +417,7 @@ export class SubAgentEngine {
     const subConversation: Conversation = {
       id: subConvId,
       assistantId: effectiveAssistantId,
-      chatModelId: resolvedChatModelId,
+      chatModelId: finalSubModelId,
       systemPrompt: subAgentSystemPrompt,
       title: `[Sub-agent] ${request.label ?? request.task.slice(0, 40)}`,
       messages: [],
@@ -414,8 +463,8 @@ When you have finished, end with one short paragraph in plain text that summaris
     this.registry.update(runId, (r) => ({
       ...r,
       subConversationId: subConvId,
-      modelId: resolvedChatModelId,
-      resolvedModelId: resolvedChatModelId,
+      modelId: finalSubModelId,
+      resolvedModelId: finalSubModelId,
       resolvedModelSlug,
       providerName,
       providerType,
@@ -538,6 +587,22 @@ When you have finished, end with one short paragraph in plain text that summaris
         error: "conversation_not_found",
         detail: `Conversation '${run.subConversationId}' not found`,
       };
+    }
+    if (run.agentName) {
+      const profiles = listSubAgentProfiles();
+      const profileRes = SubAgentProfileResolver.resolve(run.agentName, profiles);
+      if (profileRes.type === "resolved") {
+        const providers = state?.settings?.providers ?? [];
+        const modelRes = resolveSubAgentModel({ type: "inherit" }, profileRes.profile, providers);
+        if (modelRes.type === "resolved") {
+          subConversation.chatModelId = modelRes.modelId;
+        } else if (modelRes.type === "failed") {
+          return { ok: false, error: "profile_model_unresolvable", detail: modelRes.message };
+        }
+      }
+    }
+    if (!subConversation.chatModelId) {
+      subConversation.chatModelId = run.resolvedModelId ?? run.modelId ?? null;
     }
 
     const taskWithWrapup = `${trimmedPrompt}

@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { useCurrentAssistant } from "~/hooks/use-current-assistant";
+import { useConversationStore } from "~/stores/conversation-store";
 import { ReasoningSubmenu, useCurrentReasoningLabel } from "~/components/input/reasoning-picker";
 import { usePaneContainer } from "~/components/workspace/pane-container-context";
 import { CHAT_CONTAINER } from "~/stores/container-tabs-store";
@@ -32,6 +33,7 @@ import {
 // 高度收敛,弹层溢出 bug 就此消除。收藏组置顶(参考项目无此功能,保留我们的)。
 
 export interface ModelListProps {
+  conversationId?: string | null;
   disabled?: boolean;
   className?: string;
   onChanged?: (model: ProviderModel) => void;
@@ -111,7 +113,7 @@ function ModelMenuItem({
   );
 }
 
-export function ModelListImpl({ disabled = false, className, onChanged }: ModelListProps) {
+export function ModelListImpl({ conversationId, disabled = false, className, onChanged }: ModelListProps) {
   const { t } = useTranslation("input");
   const { settings, currentAssistant } = useCurrentAssistant();
   // 模型胶囊尾缀展示当前思考强度(参考项目形态);菜单末尾是思考强度子菜单。
@@ -120,7 +122,15 @@ export function ModelListImpl({ disabled = false, className, onChanged }: ModelL
   const [updatingModelId, setUpdatingModelId] = React.useState<string | null>(null);
   const [searchQuery, setSearchQuery] = React.useState("");
 
-  const currentModelId = currentAssistant?.chatModelId ?? settings?.chatModelId ?? null;
+  const storeConversation = useConversationStore((state) =>
+    conversationId ? state.entries[conversationId]?.detail : undefined,
+  );
+
+  const currentModelId =
+    storeConversation?.chatModelId ??
+    currentAssistant?.chatModelId ??
+    settings?.chatModelId ??
+    null;
   // Claude 订阅(Pro/Max,chatCapable=false)仅工作区可选:聊天列的选择器隐藏该供应商
   // (宿主引擎的 resolve 闸门同样拒绝),工作区列走 pi 引擎不经宿主闸门,照常展示。
   const paneContainer = usePaneContainer();
@@ -200,15 +210,22 @@ export function ModelListImpl({ disabled = false, className, onChanged }: ModelL
 
   const handleSelectModel = React.useCallback(
     async (model: ProviderModel) => {
-      if (disabled || !currentAssistant || model.id === currentModelId) return;
+      if (disabled || model.id === currentModelId) return;
 
       setUpdatingModelId(model.id);
       try {
-        await api.post<{ status: string }>("settings/assistant/model", {
-          assistantId: currentAssistant.id,
-          modelId: model.id,
-        });
-        await refreshSettingsStore();
+        const isSubAgentConv = (storeConversation?.title ?? "").startsWith("[Sub-agent]");
+        if (conversationId && (storeConversation?.chatModelId != null || isSubAgentConv)) {
+          await api.post<{ ok: boolean; chatModelId: string }>(`conversations/${conversationId}/model`, {
+            modelId: model.id,
+          });
+        } else if (currentAssistant) {
+          await api.post<{ status: string }>("settings/assistant/model", {
+            assistantId: currentAssistant.id,
+            modelId: model.id,
+          });
+          await refreshSettingsStore();
+        }
         onChanged?.(model);
       } catch (changeError) {
         toast.error(
@@ -218,7 +235,7 @@ export function ModelListImpl({ disabled = false, className, onChanged }: ModelL
         setUpdatingModelId(null);
       }
     },
-    [currentAssistant, currentModelId, disabled, onChanged, t],
+    [conversationId, currentAssistant, currentModelId, disabled, onChanged, storeConversation?.chatModelId, storeConversation?.title, t],
   );
 
   const handleToggleFavorite = React.useCallback(

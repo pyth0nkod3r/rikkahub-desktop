@@ -215,7 +215,7 @@ export async function handleConversationRoutes(request: Request, url: URL, path:
       }
       const body = messagesBody ?? {};
       const assistant = findAssistant(conversation.assistantId);
-      const picked = findModel(assistant.chatModelId ?? state.settings.chatModelId);
+      const picked = findModel(conversation.chatModelId ?? assistant.chatModelId ?? state.settings.chatModelId);
       const processedParts = applyInputRegexTransformParts((body.parts ?? []) as MessagePart[], assistant);
       // StartOrSteer(对齐 Codex start_or_steer_turn):占用与否由服务端裁决,前端永远只管
       // 提交。此前前端按 SSE 滞后的 isGenerating 选端点,快速连发时误判空闲走到这里,
@@ -388,7 +388,7 @@ export async function handleConversationRoutes(request: Request, url: URL, path:
       releaseMessageQueueHold(conversation.id);
 
       const assistant = findAssistant(conversation.assistantId);
-      const picked = findModel(assistant.chatModelId ?? state.settings.chatModelId);
+      const picked = findModel(conversation.chatModelId ?? assistant.chatModelId ?? state.settings.chatModelId);
       const userMessage = message("USER", markOcrPendingParts(item.parts, picked.model));
       userMessage.annotations.push({ type: "steered" });
       bumpAnalyticsMsgCount();
@@ -445,7 +445,7 @@ export async function handleConversationRoutes(request: Request, url: URL, path:
       const text = textFromParts((body.parts ?? []) as MessagePart[]).trim();
       if (!text) return error("Empty utterance", 400);
       const assistant = findAssistant(conversation.assistantId);
-      const picked = findModel(assistant.chatModelId ?? state.settings.chatModelId);
+      const picked = findModel(conversation.chatModelId ?? assistant.chatModelId ?? state.settings.chatModelId);
       const processedParts = applyInputRegexTransformParts((body.parts ?? []) as MessagePart[], assistant);
 
       const idle = !generating.has(conversation.id);
@@ -542,7 +542,7 @@ export async function handleConversationRoutes(request: Request, url: URL, path:
             // 等价于安卓的 messageRange = 0..<nodeIndex;同时避免"新回复 + 旧后续脱节"。
             conversation.messages = conversation.messages.slice(0, nodeIndex + 1);
             const assistant = findAssistant(conversation.assistantId);
-            const picked = findModel(assistant.chatModelId ?? state.settings.chatModelId);
+            const picked = findModel(conversation.chatModelId ?? assistant.chatModelId ?? state.settings.chatModelId);
             const newMsg = message("ASSISTANT", [], picked.model.id);
             targetNode.messages.push(newMsg);
             targetNode.selectIndex = targetNode.messages.length - 1;
@@ -621,7 +621,7 @@ export async function handleConversationRoutes(request: Request, url: URL, path:
       const node = conversation.messages[nodeIndex];
       const msg = node.messages.find((item) => item.id === messageId)!;
       const assistant = findAssistant(conversation.assistantId);
-      const picked = findModel(assistant.chatModelId ?? state.settings.chatModelId);
+      const picked = findModel(conversation.chatModelId ?? assistant.chatModelId ?? state.settings.chatModelId);
       // 边界断言：body.parts 来自前端，契约即 UIMessagePart[]
       const editedParts = msg.role === "USER"
         ? applyInputRegexTransformParts((body.parts ?? msg.parts) as MessagePart[], assistant)
@@ -828,6 +828,14 @@ export async function handleConversationRoutes(request: Request, url: URL, path:
       persistConversation(fork);
       broadcastList();
       return json({ conversationId: fork.id });
+    }
+    if (sub === "model" && request.method === "POST") {
+      const body = await readJson<{ modelId?: string | null }>(request);
+      conversation.chatModelId = body.modelId?.trim() || null;
+      conversation.updateAt = Date.now();
+      persistConversation(conversation);
+      broadcastConversation(conversation);
+      return json({ ok: true, chatModelId: conversation.chatModelId });
     }
     if (sub === "agent-mode" && request.method === "POST") {
       const body = await readJson<{ mode?: "build" | "plan" }>(request);

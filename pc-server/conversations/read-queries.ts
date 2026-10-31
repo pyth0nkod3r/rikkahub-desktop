@@ -29,6 +29,7 @@ interface MetaRow {
   workspace_cwd: string | null;
   engine_compactions: string | null;
   agent_mode?: string | null;
+  chat_model_id?: string | null;
 }
 
 function parseIdArray(raw: string | undefined): string[] {
@@ -62,10 +63,11 @@ function rowToMeta(row: MetaRow): ConversationMeta {
     workspaceCwd: row.workspace_cwd ?? null,
     engineCompactions: safeParseJsonArray(row.engine_compactions),
     agentMode: (row.agent_mode === "plan" ? "plan" : "build") as "build" | "plan",
+    chatModelId: row.chat_model_id ?? null,
   };
 }
 
-const META_COLUMNS = "id, assistant_id, title, system_prompt, suggestions, is_pinned, create_at, update_at, mode_injection_ids, lorebook_ids, workspace_id, workspace_cwd, engine_compactions, agent_mode";
+const META_COLUMNS = "id, assistant_id, title, system_prompt, suggestions, is_pinned, create_at, update_at, mode_injection_ids, lorebook_ids, workspace_id, workspace_cwd, engine_compactions, agent_mode, chat_model_id";
 
 /**
  * 某助手的全部会话元数据，ORDER BY create_at DESC, id DESC——

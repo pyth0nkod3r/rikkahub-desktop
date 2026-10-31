@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { useCurrentAssistant } from "~/hooks/use-current-assistant";
+import { useConversationStore } from "~/stores/conversation-store";
 import type { ProviderModel, ProviderProfile } from "~/types";
 
 export interface UseCurrentModelResult {
@@ -9,10 +10,17 @@ export interface UseCurrentModelResult {
   currentProvider: ProviderProfile | null;
 }
 
-export function useCurrentModel(): UseCurrentModelResult {
+export function useCurrentModel(conversationId?: string | null): UseCurrentModelResult {
   const { settings, currentAssistant } = useCurrentAssistant();
+  const storeConversation = useConversationStore((state) =>
+    conversationId ? state.entries[conversationId]?.detail : undefined,
+  );
 
-  const currentModelId = currentAssistant?.chatModelId ?? settings?.chatModelId ?? null;
+  const currentModelId =
+    storeConversation?.chatModelId ??
+    currentAssistant?.chatModelId ??
+    settings?.chatModelId ??
+    null;
 
   const { currentModel, currentProvider } = React.useMemo(() => {
     if (!settings || !currentModelId) {

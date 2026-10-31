@@ -287,7 +287,10 @@ export function updateSubAgentRun(run: SubAgentRun): void {
         finished_at_ms = ?,
         tokens_in = ?,
         tokens_out = ?,
-        trip_count = ?
+        trip_count = ?,
+        model_id = ?,
+        resolved_model_id = ?,
+        agent_name = ?
       WHERE id = ?`,
     )
     .run(
@@ -299,8 +302,20 @@ export function updateSubAgentRun(run: SubAgentRun): void {
       run.tokensIn,
       run.tokensOut,
       run.tripCount,
+      run.modelId ?? null,
+      (run as any).resolvedModelId ?? run.modelId ?? null,
+      run.agentName ?? null,
       run.id,
     );
+}
+
+export function getSubAgentRunBySubConversationId(subConvId: string): SubAgentRun | null {
+  const handle = db();
+  if (!handle) return null;
+  const row = handle
+    .prepare("SELECT * FROM pc_subagent_run WHERE sub_conversation_id = ? ORDER BY started_at_ms DESC LIMIT 1")
+    .get(subConvId) as RunRow | null;
+  return row ? rowToRun(row) : null;
 }
 
 export function getSubAgentRun(id: string): SubAgentRun | null {

@@ -817,13 +817,13 @@ const ConversationTimeline = React.memo(
     }, [settings]);
     const fallbackModel = React.useMemo(() => {
       if (!settings) return null;
-      const fallbackId = assistant?.chatModelId ?? settings.chatModelId;
+      const fallbackId = detail?.chatModelId ?? assistant?.chatModelId ?? settings.chatModelId;
       return (
         modelById.get(fallbackId) ??
         settings.providers.flatMap((provider) => provider.models)[0] ??
         null
       );
-    }, [assistant?.chatModelId, modelById, settings]);
+    }, [detail?.chatModelId, assistant?.chatModelId, modelById, settings]);
 
     // 仅对"进入会话(或切换会话)之后才新出现的消息"播放入场动画。首次加载的历史
     // 消息一律不动画——避免长会话进入时 N 条消息并发播 4 属性动画拖垮首屏 mount。

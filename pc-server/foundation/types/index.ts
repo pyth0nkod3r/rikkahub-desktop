@@ -585,6 +585,7 @@ export interface PcConversationRow {
   workspace_cwd?: string | null;
   engine_compactions?: string | null;
   agent_mode?: string | null;
+  chat_model_id?: string | null;
 }
 export interface PcMessageNodeRow {
   id: string;

@@ -73,7 +73,8 @@ export function ensureConversationTables(db: InstanceType<typeof Database>): voi
       workspace_id       TEXT,
       workspace_cwd      TEXT,
       engine_compactions TEXT,
-      agent_mode         TEXT NOT NULL DEFAULT 'build'
+      agent_mode         TEXT NOT NULL DEFAULT 'build',
+      chat_model_id      TEXT
     );
     CREATE TABLE IF NOT EXISTS pc_message_node (
       id              TEXT PRIMARY KEY NOT NULL,
@@ -133,6 +134,18 @@ function ensureConversationWorkspaceColumns(db: InstanceType<typeof Database>): 
  *  老库中留作死列(SQLite 删列代价不值当)。仅存 PC 自有库,跨端导出白名单不含此列。
  *  export 仅为回归测试(老库升级路径需在真实 ALTER 上验证)。 */
 
+
+export function ensureConversationChatModelColumn(db: InstanceType<typeof Database>): void {
+  try {
+    const cols = db.prepare("PRAGMA table_info(pc_conversation)").all() as { name: string }[];
+    const names = new Set(cols.map((c) => c.name));
+    if (names.has("chat_model_id")) return;
+    db.exec("ALTER TABLE pc_conversation ADD COLUMN chat_model_id TEXT");
+  } catch (err) {
+    console.warn("[conv-db] 会话 chat_model_id 列迁移失败", err);
+  }
+}
+
 export function ensureConversationAgentModeColumn(db: InstanceType<typeof Database>): void {
   try {
     const cols = db.prepare("PRAGMA table_info(pc_conversation)").all() as { name: string }[];
@@ -189,6 +202,7 @@ function openConversationsDbUnsafe(): InstanceType<typeof Database> {
     ensureConversationWorkspaceColumns(db);
     ensureConversationEngineCompactionsColumn(db);
     ensureConversationAgentModeColumn(db);
+    ensureConversationChatModelColumn(db);
     ensureMessageFtsTable(db);
     // FTS 自愈重建：老库首次升级（表刚建、空）或索引意外丢失时，从节点表全量重建。
     // 幂等：行数>0 时零成本跳过。
@@ -234,6 +248,7 @@ export function loadConversationMetasFromDb(db: InstanceType<typeof Database>): 
     workspaceCwd: row.workspace_cwd ?? null,
     engineCompactions: safeParseJsonArray(row.engine_compactions),
     agentMode: (row.agent_mode === "plan" ? "plan" : "build") as "build" | "plan",
+    chatModelId: row.chat_model_id ?? null,
   }));
 }
 
@@ -295,7 +310,27 @@ function loadConversationForWorkingSet(convId: string): Conversation | undefined
   try {
     const meta = getConversationMeta(conversationsDb, convId);
     if (!meta) return undefined;
-    meta.messages = loadConversationNodesFromDb(conversationsDb, convId);
+        meta.messages = loadConversationNodesFromDb(conversationsDb, convId);
+    if (!meta.chatModelId) {
+      try {
+        const subRunRow = conversationsDb.prepare(
+          "SELECT model_id, resolved_model_id, agent_name FROM pc_subagent_run WHERE sub_conversation_id = ? ORDER BY started_at_ms DESC LIMIT 1",
+        ).get(convId) as { model_id: string | null; resolved_model_id: string | null; agent_name: string | null } | null;
+        if (subRunRow) {
+          let healedModelId = subRunRow.resolved_model_id || subRunRow.model_id;
+          if (!healedModelId && subRunRow.agent_name) {
+            const profileRow = conversationsDb.prepare(
+              "SELECT model_id FROM pc_subagent_profile WHERE name = ? LIMIT 1",
+            ).get(subRunRow.agent_name) as { model_id: string | null } | null;
+            if (profileRow?.model_id) healedModelId = profileRow.model_id;
+          }
+          if (healedModelId) {
+            meta.chatModelId = healedModelId;
+            conversationsDb.prepare("UPDATE pc_conversation SET chat_model_id = ? WHERE id = ?").run(healedModelId, convId);
+          }
+        }
+      } catch {}
+    }
     return meta;
   } catch (err) {
     console.warn("[conv-db] working set 加载会话失败", convId, err);
@@ -374,11 +409,11 @@ function safeParseStringArray(raw: string): string[] {
 // 该会话全部节点行被级联清空。流式期间每 200ms flush 都 upsert 会话行,等于整个流式期间
 // 磁盘上只剩正在补写的脏节点;流式中途进程死亡 = 会话历史永久丢失。
 const UPSERT_CONVERSATION_SQL =
-  "INSERT INTO pc_conversation (id, assistant_id, title, system_prompt, suggestions, is_pinned, create_at, update_at, mode_injection_ids, lorebook_ids, workspace_id, workspace_cwd, engine_compactions, agent_mode) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+  "INSERT INTO pc_conversation (id, assistant_id, title, system_prompt, suggestions, is_pinned, create_at, update_at, mode_injection_ids, lorebook_ids, workspace_id, workspace_cwd, engine_compactions, agent_mode, chat_model_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
   "ON CONFLICT(id) DO UPDATE SET assistant_id = excluded.assistant_id, title = excluded.title, system_prompt = excluded.system_prompt, " +
   "suggestions = excluded.suggestions, is_pinned = excluded.is_pinned, create_at = excluded.create_at, update_at = excluded.update_at, " +
   "mode_injection_ids = excluded.mode_injection_ids, lorebook_ids = excluded.lorebook_ids, workspace_id = excluded.workspace_id, workspace_cwd = excluded.workspace_cwd, " +
-  "engine_compactions = excluded.engine_compactions, agent_mode = excluded.agent_mode";
+  "engine_compactions = excluded.engine_compactions, agent_mode = excluded.agent_mode, chat_model_id = excluded.chat_model_id";
 
 const UPSERT_NODE_SQL =
   "INSERT INTO pc_message_node (id, conversation_id, node_index, messages, select_index) VALUES (?, ?, ?, ?, ?) " +
@@ -401,6 +436,7 @@ export function upsertConversationRowInto(db: InstanceType<typeof Database>, con
     conv.workspaceCwd ?? null,
     conv.engineCompactions?.length ? JSON.stringify(conv.engineCompactions) : null,
     conv.agentMode || "build",
+    conv.chatModelId ?? null,
   );
 }
 
@@ -603,6 +639,7 @@ export function migrateConversationsIntoDb(db: InstanceType<typeof Database>, co
         conv.workspaceCwd ?? null,
         conv.engineCompactions?.length ? JSON.stringify(conv.engineCompactions) : null,
         conv.agentMode || "build",
+        conv.chatModelId ?? null,
       );
       deleteNodes.run(conv.id);
       deleteConversationFts(db, [conv.id]);
@@ -669,7 +706,8 @@ export function exportPcConversationsDump(targetPath: string): number {
         workspace_id       TEXT,
         workspace_cwd      TEXT,
         engine_compactions TEXT,
-      agent_mode         TEXT NOT NULL DEFAULT 'build'
+      agent_mode         TEXT NOT NULL DEFAULT 'build',
+      chat_model_id      TEXT
       );
       CREATE TABLE pcdump.pc_message_node (
         id              TEXT PRIMARY KEY NOT NULL,
