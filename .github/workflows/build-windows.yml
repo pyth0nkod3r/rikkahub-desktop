@@ -111,17 +111,28 @@ jobs:
           files: |
             web-ui/src-tauri/target/release/bundle/nsis/*.exe
             dist/*_portable.zip
-      - name: Retain only the 3 most recent workflow runs
+      - name: Retain only the 7 most recent successful workflow runs and eliminate failed runs
         if: always()
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
         run: |
-          echo "Pruning older workflow runs (convention: keep 3 most recent)..."
-          RUNS=$(gh run list --repo "$GH_REPO" --limit 100 --json databaseId,createdAt --jq 'sort_by(.createdAt) | reverse | .[3:][].databaseId' || true)
-          for RUN_ID in $RUNS; do
-            echo "Deleting run $RUN_ID..."
+          echo "Eliminating all failed workflow runs..."
+          FAILED_RUN_IDS=$(gh run list --repo "$GH_REPO" --limit 100 --json databaseId,status,conclusion --jq '.[] | select(.status == "completed" and .conclusion != "success") | .databaseId')
+          for RUN_ID in $FAILED_RUN_IDS; do
+            echo "Deleting failed run $RUN_ID..."
             gh run delete "$RUN_ID" --repo "$GH_REPO" || true
+          done
+
+          echo "Pruning older successful runs to keep at most 7..."
+          SUCCESS_RUN_IDS=$(gh run list --repo "$GH_REPO" --limit 100 --json databaseId,status,conclusion --jq '.[] | select(.status == "completed" and .conclusion == "success") | .databaseId')
+          INDEX=0
+          for RUN_ID in $SUCCESS_RUN_IDS; do
+            INDEX=$((INDEX + 1))
+            if [ "$INDEX" -gt 7 ]; then
+              echo "Deleting old successful run $RUN_ID..."
+              gh run delete "$RUN_ID" --repo "$GH_REPO" || true
+            fi
           done
 

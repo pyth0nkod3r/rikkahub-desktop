@@ -16,7 +16,7 @@ jobs:
     name: Enforce Workflow Retention Policy
     runs-on: ubuntu-latest
     steps:
-      - name: Prune failed runs and retain only the 10 most recent successful runs
+      - name: Prune failed runs and retain only the 7 most recent successful runs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
@@ -52,16 +52,16 @@ jobs:
               }
             }
 
-            // 2. Identify successful runs and keep only the 10 most recent
+            // 2. Identify successful runs and keep only the 7 most recent
             const successful = runsToProcess
               .filter(r => r.conclusion === 'success')
               .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
             console.log('Found ' + successful.length + ' successful run(s).');
-            const excessSuccessful = successful.slice(10);
+            const excessSuccessful = successful.slice(7);
 
             if (excessSuccessful.length > 0) {
-              console.log('Deleting ' + excessSuccessful.length + ' older successful run(s) beyond the 10 most recent...');
+              console.log('Deleting ' + excessSuccessful.length + ' older successful run(s) beyond the 7 most recent...');
               for (const r of excessSuccessful) {
                 try {
                   console.log('Deleting older successful run ' + r.databaseId + ' (' + r.createdAt + ')...');
@@ -71,8 +71,8 @@ jobs:
                 }
               }
             } else {
-              console.log('Successful runs within limit (' + successful.length + '/10). No excess to prune.');
+              console.log('Successful runs within limit (' + successful.length + '/7). No excess to prune.');
             }
 
-            console.log('Done: Enforced directive of retaining only the 10 most recent successful workflows and eliminating all failed runs.');
+            console.log('Done: Enforced directive of retaining only the 7 most recent successful workflows and eliminating all failed runs.');
           "
