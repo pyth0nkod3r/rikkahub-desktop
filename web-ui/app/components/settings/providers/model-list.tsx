@@ -113,14 +113,16 @@ export function ProviderModelList({
     return manual.length > 0 ? [...manual, ...rest] : rest;
   })();
   // Free-text filter (name or id). Applied on top of displayModels for the list view.
+  const isFiltered = Boolean(modelFilter.trim());
   const visibleModels = (() => {
     const query = modelFilter.trim().toLowerCase();
     if (!query) return displayModels;
-    return displayModels.filter(
-      (model) =>
-        (model.displayName ?? "").toLowerCase().includes(query) ||
-        (model.modelId ?? "").toLowerCase().includes(query),
-    );
+    const keywords = query.split(/\s+/).filter(Boolean);
+    return displayModels.filter((model) => {
+      const name = (model.displayName ?? "").toLowerCase();
+      const id = (model.modelId ?? "").toLowerCase();
+      return keywords.every((kw) => name.includes(kw) || id.includes(kw));
+    });
   })();
   // Whether every currently-visible (filtered) model is already enabled — drives the
   // select-all toggle label + click behavior. Acts on visibleModels, not the full set,
@@ -150,15 +152,26 @@ export function ProviderModelList({
   // Batch enable/disable for the "select all" toolbar. Acts on a given set of models
   // (the currently-visible filtered set): enable adds any missing ones (auto-typed),
   // disable removes them. Mirrors toggleModel's dedupe + applyAutoModelType semantics.
+  // When filtering: "select all should only select all the output of the filter"
+  // (i.e. replace selection so ONLY the filtered models are enabled, preserving prior customizations).
+  // When not filtering: enable all displayModels.
   const setModelsEnabled = (modelsToToggle: ProviderModel[], enabled: boolean) => {
     const ids = new Set(modelsToToggle.map((model) => model.modelId));
     if (enabled) {
-      const existingIds = new Set((draft.models ?? []).map((model) => model.modelId));
-      const additions = modelsToToggle
-        .filter((model) => !existingIds.has(model.modelId))
-        .map(applyAutoModelType);
-      if (additions.length === 0) return;
-      patchDraft({ models: [...(draft.models ?? []), ...additions] });
+      if (isFiltered) {
+        const existingMap = new Map((draft.models ?? []).map((m) => [m.modelId, m]));
+        const onlyFiltered = modelsToToggle.map(
+          (model) => existingMap.get(model.modelId) ?? applyAutoModelType(model),
+        );
+        patchDraft({ models: onlyFiltered });
+      } else {
+        const existingIds = new Set((draft.models ?? []).map((model) => model.modelId));
+        const additions = modelsToToggle
+          .filter((model) => !existingIds.has(model.modelId))
+          .map(applyAutoModelType);
+        if (additions.length === 0) return;
+        patchDraft({ models: [...(draft.models ?? []), ...additions] });
+      }
     } else {
       const remaining = (draft.models ?? []).filter((model) => !ids.has(model.modelId));
       if (remaining.length === (draft.models ?? []).length) return;
@@ -292,8 +305,10 @@ export function ProviderModelList({
             {/* 已启用/总数:当前过滤后还剩多少一目了然。 */}
             <span className="shrink-0 text-xs tabular-nums text-[var(--ds-text-secondary)]">
               {t("settings:providers.models_selection_count", {
-                enabled: draft.models?.length ?? 0,
-                total: displayModels.length,
+                enabled: isFiltered
+                  ? visibleModels.filter((m) => selectedModelIds.has(m.modelId)).length
+                  : draft.models?.length ?? 0,
+                total: isFiltered ? visibleModels.length : displayModels.length,
               })}
             </span>
             <Button

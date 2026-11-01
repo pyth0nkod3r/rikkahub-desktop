@@ -58,28 +58,30 @@ export function ProviderTestPanel({
     modelId: string;
     prompt: string;
   } | null>(null);
-  // 刚拉取到上游列表时默认测第一个上游模型(而不是沿用已启用列表里的旧选择)。
-  React.useEffect(() => {
-    const first = fetchedModels.find((model) => model.modelId !== "auto")?.modelId;
-    if (first) setTestModelId(first);
-  }, [fetchedModels]);
-  const fetchedModelIds = new Set(fetchedModels.map((model) => model.modelId));
-  const mergedTestModels = [
-    ...fetchedModels,
-    ...(draft.models ?? []).filter(
-      (model) => model.modelId !== "auto" && !fetchedModelIds.has(model.modelId),
-    ),
-  ].filter((model) => model.modelId !== "auto");
+
+  // Test model dropdown should ONLY display selected models (excluding synthetic "auto").
+  const selectedTestModels = React.useMemo(
+    () => (draft.models ?? []).filter((model) => model.modelId !== "auto"),
+    [draft.models],
+  );
+
+  // Keep testModelId synchronized with available selected models.
   const effectiveTestModelId =
-    (testModelId && mergedTestModels.some((model) => model.modelId === testModelId)
+    (testModelId && selectedTestModels.some((model) => model.modelId === testModelId)
       ? testModelId
-      : mergedTestModels[0]?.modelId) || "";
+      : selectedTestModels[0]?.modelId) || "";
+
+  React.useEffect(() => {
+    if (selectedTestModels.length > 0 && !selectedTestModels.some((model) => model.modelId === testModelId)) {
+      setTestModelId(selectedTestModels[0].modelId);
+    }
+  }, [selectedTestModels, testModelId]);
+
   // The selected test model's persisted record drives whether we run the image-gen test path
   // (and hide the 3-mode chat panel) vs the chat test path.
   const effectiveTestModelType = (() => {
-    const persisted = (draft.models ?? []).find((item) => item.modelId === effectiveTestModelId);
-    const merged = mergedTestModels.find((item) => item.modelId === effectiveTestModelId);
-    return String(persisted?.type ?? merged?.type ?? "CHAT").toUpperCase();
+    const selected = selectedTestModels.find((item) => item.modelId === effectiveTestModelId);
+    return String(selected?.type ?? "CHAT").toUpperCase();
   })();
   const isImageTestMode = effectiveTestModelType === "IMAGE";
   const testModeLabels: Record<ProviderTestMode, string> = {
@@ -88,6 +90,10 @@ export function ProviderTestPanel({
     tools: t("settings:providers.mode_tools"),
   };
   const test = async () => {
+    if (!effectiveTestModelId || selectedTestModels.length === 0) {
+      toast.error(t("settings:providers.test_model_ph"));
+      return;
+    }
     setTesting(true);
     setTestChecks([]);
     setTestInfo(null);
@@ -96,9 +102,7 @@ export function ProviderTestPanel({
     // the 3-mode chat test. Matches Android, which never tries chat completions for IMAGE models.
     const requestedModelId = effectiveTestModelId;
     const selectedTestModel =
-      (draft.models ?? []).find((item) => item.modelId === requestedModelId) ??
-      mergedTestModels.find((item) => item.modelId === requestedModelId) ??
-      null;
+      selectedTestModels.find((item) => item.modelId === requestedModelId) ?? null;
     if (selectedTestModel && (selectedTestModel.type as string) === "IMAGE") {
       setTestResult(t("settings:providers.test_img_starting"));
       try {
@@ -266,19 +270,32 @@ export function ProviderTestPanel({
           label={t("settings:providers.test_model")}
           control={
             <>
-              <Select value={effectiveTestModelId} onValueChange={setTestModelId}>
-                <SelectTrigger className="w-48 max-w-full" aria-label={t("settings:providers.test_model")}>
+              <Select
+                value={effectiveTestModelId}
+                onValueChange={setTestModelId}
+                disabled={testing || selectedTestModels.length === 0}
+              >
+                <SelectTrigger
+                  className="w-48 max-w-full"
+                  aria-label={t("settings:providers.test_model")}
+                  disabled={testing || selectedTestModels.length === 0}
+                >
                   <SelectValue placeholder={t("settings:providers.test_model_ph")} />
                 </SelectTrigger>
                 <SelectContent>
-                  {mergedTestModels.map((model) => (
+                  {selectedTestModels.map((model) => (
                     <SelectItem key={model.id ?? model.modelId} value={model.modelId}>
                       {getModelDisplayName(model.displayName, model.modelId)}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              <Button variant="tertiary" size="compact" onClick={() => void test()} disabled={testing}>
+              <Button
+                variant="tertiary"
+                size="compact"
+                onClick={() => void test()}
+                disabled={testing || selectedTestModels.length === 0 || !effectiveTestModelId}
+              >
                 {testing ? <Loader2 className="animate-spin" /> : <Database />}
                 {t("settings:providers.test")}
               </Button>
