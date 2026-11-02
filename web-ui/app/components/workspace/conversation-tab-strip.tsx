@@ -261,6 +261,30 @@ export function ConversationTabStrip({
     return map;
   }, [conversations]);
 
+  const { regularTabs, subagentTabs } = React.useMemo(() => {
+    const reg: string[] = [];
+    const sub: string[] = [];
+    for (const id of tabs) {
+      const tit = titleById.get(id) ?? "";
+      if (tit.startsWith("[Sub-agent]")) {
+        sub.push(id);
+      } else {
+        reg.push(id);
+      }
+    }
+    return { regularTabs: reg, subagentTabs: sub };
+  }, [tabs, titleById]);
+
+  const tabsToRender = React.useMemo(() => {
+    if (subagentTabs.length <= 2) {
+      return tabs;
+    }
+    if (activeConversation && subagentTabs.includes(activeConversation)) {
+      return [...regularTabs, activeConversation];
+    }
+    return regularTabs;
+  }, [tabs, regularTabs, subagentTabs, activeConversation]);
+
   const handleClose = (conversationId: string) => {
     const next = useContainerTabsStore.getState().closeConversation(container, conversationId);
     if (next !== undefined) navigate(next ? `/c/${next}` : "/");
