@@ -514,10 +514,28 @@ When you have finished, end with one short paragraph in plain text that summaris
       const updatedConv = getConversation(subConvId) ?? subConversation;
       const finalText = this.harvestFinalText(updatedConv);
 
+      let tokensIn = 0;
+      let tokensOut = 0;
+      let tripCount = 0;
+      for (const node of updatedConv.messages) {
+        for (const m of node.messages) {
+          if (m.usage) {
+            tokensIn += Number(m.usage.promptTokens ?? 0);
+            tokensOut += Number(m.usage.completionTokens ?? 0);
+          }
+          if (m.role === "ASSISTANT") {
+            tripCount += 1;
+          }
+        }
+      }
+
       this.registry.update(runId, (r) => ({
         ...r,
         status: "succeeded",
         result: finalText,
+        tokensIn,
+        tokensOut,
+        tripCount,
         finishedAtMs: Date.now(),
       }));
 
@@ -529,8 +547,61 @@ When you have finished, end with one short paragraph in plain text that summaris
       const isAbort =
         controller.signal.aborted ||
         (err instanceof DOMException && err.name === "AbortError");
+      let errorMsg = err instanceof Error ? err.message : String(err);
+
+      // Automatic Model Fallback Cascade for subagent failure
+      const runRecord = this.registry.get(runId);
+      if (!isAbort && runRecord && !runRecord.attemptedModel) {
+        const fallbackModelId = state?.settings?.fastModelId || state?.settings?.chatModelId;
+        if (fallbackModelId && fallbackModelId !== subConversation.chatModelId) {
+          const originalModel = subConversation.chatModelId ?? "default";
+          this.registry.update(runId, (r) => ({
+            ...r,
+            attemptedModel: originalModel,
+            fallbackReason: errorMsg,
+          }));
+          subConversation.chatModelId = fallbackModelId;
+          persistConversation(subConversation);
+
+          try {
+            checkoutConversation(subConvId);
+            await generateAnswer(subConversation);
+            const fallbackConv = getConversation(subConvId) ?? subConversation;
+            const fallbackFinalText = this.harvestFinalText(fallbackConv);
+            let fTokensIn = 0;
+            let fTokensOut = 0;
+            let fTrips = 0;
+            for (const node of fallbackConv.messages) {
+              for (const m of node.messages) {
+                if (m.usage) {
+                  fTokensIn += Number(m.usage.promptTokens ?? 0);
+                  fTokensOut += Number(m.usage.completionTokens ?? 0);
+                }
+                if (m.role === "ASSISTANT") fTrips += 1;
+              }
+            }
+            this.registry.update(runId, (r) => ({
+              ...r,
+              status: "succeeded",
+              result: fallbackFinalText,
+              tokensIn: fTokensIn,
+              tokensOut: fTokensOut,
+              tripCount: fTrips,
+              finishedAtMs: Date.now(),
+            }));
+            persistConversation(fallbackConv);
+            broadcastList();
+            this.notifyParentIfBackground(parentChatId, this.registry.get(runId));
+            return;
+          } catch (fallbackErr) {
+            errorMsg = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
+          } finally {
+            releaseConversation(subConvId);
+          }
+        }
+      }
+
       const status: SubAgentStatus = isAbort ? "cancelled" : "failed";
-      const errorMsg = err instanceof Error ? err.message : String(err);
       this.markTerminal(runId, status, errorMsg);
       const convToSave = getConversation(subConvId) ?? subConversation;
       persistConversation(convToSave);

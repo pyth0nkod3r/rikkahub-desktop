@@ -217,3 +217,64 @@ export function sweepWorkspaceReservedNameArtifacts(dir: string): void {
     );
   }
 }
+
+export interface WorkspaceFileMatch {
+  path: string;
+  name: string;
+  type: "file" | "dir";
+}
+
+export function searchWorkspaceFiles(
+  workspace: Workspace,
+  query: string,
+  limit = 25,
+): WorkspaceFileMatch[] {
+  const root = workspace.root;
+  const results: WorkspaceFileMatch[] = [];
+  const q = (query || "").trim().toLowerCase();
+
+  const IGNORED = new Set([
+    "node_modules",
+    ".git",
+    "dist",
+    "build",
+    ".next",
+    ".cache",
+    ".turbo",
+    ".idea",
+    ".vscode",
+    "target",
+    "vendor",
+    ".output",
+  ]);
+
+  function scan(currentDir: string, rel: string) {
+    if (results.length >= limit) return;
+    let entries;
+    try {
+      entries = fs.readdirSync(currentDir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (results.length >= limit) break;
+      const isDir = entry.isDirectory();
+      if (isDir) {
+        if (IGNORED.has(entry.name) || entry.name.startsWith(".")) continue;
+        const subRel = rel ? rel + "/" + entry.name : entry.name;
+        if (!q || subRel.toLowerCase().includes(q)) {
+          results.push({ path: subRel, name: entry.name, type: "dir" });
+        }
+        scan(require("node:path").join(currentDir, entry.name), subRel);
+      } else if (entry.isFile()) {
+        const subRel = rel ? rel + "/" + entry.name : entry.name;
+        if (!q || subRel.toLowerCase().includes(q) || entry.name.toLowerCase().includes(q)) {
+          results.push({ path: subRel, name: entry.name, type: "file" });
+        }
+      } 
+    }
+  }
+
+  scan(root, "");
+  return results;
+}

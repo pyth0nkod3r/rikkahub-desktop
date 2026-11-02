@@ -1,12 +1,14 @@
 import * as React from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router";
 import {
   AudioLines,
   BookHeart,
   BookX,
   Bot,
   ChevronDown,
+  ExternalLink,
   Check,
   Clipboard,
   ClipboardList,
@@ -914,6 +916,7 @@ function SubAgentDispatchToolStep({
   loading,
 }: ToolPartProps) {
   const { t } = useTranslation("message");
+  const navigate = useNavigate();
   const args = React.useMemo(() => safeJsonParse(tool.input) as Record<string, unknown> | null, [tool.input]);
   const task = getStringField(args, "task") || "";
   const label = getStringField(args, "label") || task.slice(0, 50);
@@ -934,9 +937,22 @@ function SubAgentDispatchToolStep({
   const resultText = typeof outputObj?.result === "string" ? outputObj.result : null;
   const errorText = typeof outputObj?.error === "string" ? outputObj.error : null;
   const runId = typeof outputObj?.id === "string" ? outputObj.id : null;
+  const subConversationId = typeof outputObj?.sub_conversation_id === "string" ? outputObj.sub_conversation_id : null;
+  const tokensIn = typeof outputObj?.tokens_in === "number" ? outputObj.tokens_in : 0;
+  const tokensOut = typeof outputObj?.tokens_out === "number" ? outputObj.tokens_out : 0;
+  const totalTokens = tokensIn + tokensOut;
+  const resolvedModel = typeof outputObj?.resolved_model === "string" ? outputObj.resolved_model : null;
+  const attemptedModel = typeof outputObj?.attempted_model === "string" ? outputObj.attempted_model : null;
+  const fallbackReason = typeof outputObj?.fallback_reason === "string" ? outputObj.fallback_reason : null;
 
   const [expanded, setExpanded] = React.useState(false);
   const [cancelling, setCancelling] = React.useState(false);
+
+  const isRunning = status === "running" || status === "pending" || loading;
+  const isSucceeded = status === "succeeded";
+  const isFailed = status === "failed" || status === "timed_out";
+  const isCancelled = status === "cancelled";
+  const elapsed = useToolElapsedSeconds(tool.createdAt, tool.finishedAt, isRunning);
 
   const handleCancel = async () => {
     if (!runId) return;
@@ -950,11 +966,6 @@ function SubAgentDispatchToolStep({
       setCancelling(false);
     }
   };
-
-  const isRunning = status === "running" || status === "pending" || loading;
-  const isSucceeded = status === "succeeded";
-  const isFailed = status === "failed" || status === "timed_out";
-  const isCancelled = status === "cancelled";
 
   return (
     <div className="my-2 overflow-hidden rounded-xl border border-border/70 bg-card p-3 shadow-sm">
@@ -984,12 +995,12 @@ function SubAgentDispatchToolStep({
           {isRunning ? (
             <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-[11px] font-medium text-primary animate-pulse">
               <span className="size-1.5 rounded-full bg-primary" />
-              Running
+              Running{elapsed != null ? ` (${elapsed}s)` : ""}
             </span>
           ) : isSucceeded ? (
             <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
               <Check className="h-3 w-3" />
-              Finished
+              Finished{elapsed != null ? ` (${elapsed}s)` : ""}
             </span>
           ) : isFailed ? (
             <span className="inline-flex items-center gap-1 rounded-full bg-destructive/15 px-2 py-0.5 text-[11px] font-medium text-destructive">
@@ -1001,6 +1012,19 @@ function SubAgentDispatchToolStep({
               Cancelled
             </span>
           ) : null}
+
+          {subConversationId && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-6 gap-1 px-2 text-[11px] font-medium text-foreground hover:bg-accent"
+              onClick={() => navigate(`/c/${subConversationId}`)}
+              title="Focus subagent conversation tab"
+            >
+              <ExternalLink className="size-3" />
+              <span>Focus Tab</span>
+            </Button>
+          )}
 
           {isRunning && runId && (
             <Button
@@ -1018,6 +1042,21 @@ function SubAgentDispatchToolStep({
 
       {task && task !== label && (
         <p className="mt-1.5 text-xs text-muted-foreground line-clamp-2">{task}</p>
+      )}
+
+      {(totalTokens > 0 || attemptedModel) && (
+        <div className="mt-1.5 flex items-center gap-2 flex-wrap text-[10px] text-muted-foreground">
+          {totalTokens > 0 && (
+            <span className="rounded bg-muted/60 px-1.5 py-0.5 tabular-nums">
+              {resolvedModel ? `${resolvedModel} ? ` : ""}{totalTokens >= 1000 ? `${(totalTokens / 1000).toFixed(1)}k tok` : `${totalTokens} tok`}
+            </span>
+          )}
+          {attemptedModel && (
+            <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-amber-600 dark:text-amber-400" title={fallbackReason ?? undefined}>
+              ?? Auto-fallback from {attemptedModel}
+            </span>
+          )}
+        </div>
       )}
 
       {errorText && (

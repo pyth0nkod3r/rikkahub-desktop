@@ -4,7 +4,7 @@
 import type { Workspace } from "../../foundation/types";
 import type { WorkspaceDto } from "../../foundation/types/dto";
 import { createWorkspace, deleteWorkspace, getWorkspace, listWorkspaces, trustWorkspace, updateWorkspace, workspaceStatus } from "../../workspace";
-import { deleteWorkspaceEntry, listWorkspaceDir, previewWorkspaceFile, readWorkspaceAgentsFile, renameWorkspaceEntry, revealWorkspaceEntry, writeWorkspaceAgentsFile } from "../../workspace/files";
+import { deleteWorkspaceEntry, listWorkspaceDir, previewWorkspaceFile, searchWorkspaceFiles, readWorkspaceAgentsFile, renameWorkspaceEntry, revealWorkspaceEntry, writeWorkspaceAgentsFile } from "../../workspace/files";
 import { mountedWorkspaceToolNames, refreshShellAvailability, shellAvailability } from "../../workspace/runtime";
 import { error, json, readJson } from "../request";
 import { getSandboxStatus } from "../../workspace/sandboxing/detect";
@@ -78,6 +78,10 @@ export async function handleWorkspaceRoutes(request: Request, _url: URL, path: s
     if (!workspace) return error("Workspace not found", 404);
     const relPath = _url.searchParams.get("path") ?? "";
     try {
+      if (sub === "files/search" && request.method === "GET") {
+        const q = _url.searchParams.get("q") ?? _url.searchParams.get("query") ?? "";
+        return json({ matches: searchWorkspaceFiles(workspace, q, 30) });
+      }
       if (sub === "files" && request.method === "GET") {
         return json({ entries: listWorkspaceDir(workspace, relPath) });
       }

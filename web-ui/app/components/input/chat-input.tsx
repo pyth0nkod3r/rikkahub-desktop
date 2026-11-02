@@ -1,7 +1,7 @@
 import { useWorkspaceLayoutStore, getChatWidthClass } from "~/stores/workspace-layout-store";
 import * as React from "react";
 
-import { ArrowUp, Download, File, FileDown, Image, LoaderCircle, Mic, PhoneCall, Plus, Scissors, Sparkles, Square, TriangleAlert, Undo2, Video, X, Zap } from "lucide-react";
+import { ArrowUp, CornerDownRight, Download, File, FileDown, Image, LoaderCircle, Mic, PhoneCall, Plus, Scissors, Sparkles, Square, TriangleAlert, Undo2, Video, X, Zap } from "lucide-react";
 import { startMicCapture } from "~/lib/voice/mic-capture";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -13,6 +13,11 @@ import { AgentModePicker, AgentPlanModeBanner } from "~/components/input/agent-m
 import { MemoryBadge } from "~/components/memory/memory-badge";
 import { ExtensionPickerButton } from "~/components/input/extension-picker";
 import { CommandHighlightOverlay, SlashCommandMenu, TEXTAREA_METRICS } from "~/components/input/slash-command-menu";
+import { WorkspaceFileMentionMenu } from "~/components/input/workspace-file-mention-menu";
+import { useFileMention } from "~/hooks/use-file-mention";
+import { usePaneContainer } from "~/components/workspace/pane-container-context";
+import { CHAT_CONTAINER } from "~/stores/container-tabs-store";
+import { useWorkspaceStore } from "~/stores/workspace-store";
 import { WorkspacePermissionPicker } from "~/components/input/workspace-permission-picker";
 import { WorkspaceFilesButton } from "~/components/input/workspace-files-button";
 import { useSlashCommand } from "~/hooks/use-slash-command";
@@ -700,6 +705,7 @@ function ChatInputInner({
     (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
       // 斜杠推荐菜单优先消费(↑↓/Tab/Enter/Esc;菜单打开时 Enter=补全,绝不发送)。
       if (slash.handleMenuKeyDown(event)) return;
+      if (fileMention.handleMenuKeyDown(event)) return;
 
       // 域9-2(3D):编辑模式 Esc = 点"取消"按钮。菜单开着时上面已消费(第一次 Esc 只关
       // 菜单);IME 组合输入中(isComposing)不响应,避免中/日文输入法取词 Esc 误退编辑。
@@ -730,7 +736,7 @@ function ChatInputInner({
       event.preventDefault();
       void handlePrimaryAction();
     },
-    [handlePrimaryAction, hasParsingAttachments, isEditing, isGenerating, onCancelEdit, sendOnEnter, slash.handleMenuKeyDown, t],
+    [fileMention.handleMenuKeyDown, handlePrimaryAction, hasParsingAttachments, isEditing, isGenerating, onCancelEdit, sendOnEnter, slash.handleMenuKeyDown, t],
   );
 
   const handleUploadInputChange = React.useCallback(
@@ -827,6 +833,16 @@ function ChatInputInner({
               query={slash.query}
               onHover={slash.setSelectedIndex}
               onPick={slash.pick}
+            />
+          ) : null}
+          {fileMention.menuOpen ? (
+            <WorkspaceFileMentionMenu
+              id="chat-file-mention-menu"
+              matches={fileMention.matches}
+              selectedIndex={fileMention.selectedIndex}
+              query={fileMention.query}
+              onHover={fileMention.setSelectedIndex}
+              onPick={fileMention.pickMatch}
             />
           ) : null}
           {/* 待确认记忆提醒角标:浮在输入框右上角外沿,像消息提醒。仅有待确认项时渲染。 */}
@@ -1120,6 +1136,19 @@ function ChatInputInner({
                 </Button>
               ) : null}
               <ModelList disabled={!canSwitchModel} conversationId={conversationId} />
+              {isGenerating && !isEmpty ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void handlePrimaryAction({ steerImmediately: false })}
+                  className="h-8 gap-1.5 rounded-full border-amber-500/50 bg-amber-500/10 px-2.5 text-xs font-medium text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 shadow-sm transition animate-pulse"
+                  title="Inject prompt into active agent turn at next boundary"
+                >
+                  <CornerDownRight className="size-3.5" />
+                  <span className="hidden sm:inline">Steer agent</span>
+                </Button>
+              ) : null}
               {/* cpd-action-btn:语音/发送合一——空文本=麦克风(常驻底色),有文本=
                   品牌色上箭头,录音=红底声纹条,生成中=红底停止。状态切换带宽度/配色过渡。
                   消息发送队列:生成中且有文本 → 上箭头=「发送并排队」(不打断当前流);仅空文本才落红停止。 */}

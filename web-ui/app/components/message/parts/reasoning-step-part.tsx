@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import Markdown from "~/components/markdown/markdown";
 import type { ReasoningPart as UIReasoningPart } from "~/types";
 import Think from "~/assets/think.svg?react";
-import { extractThinkingTitle } from "~/lib/utils";
+import { extractThinkingTitle, cn } from "~/lib/utils";
 import { useElapsedSeconds } from "~/hooks/use-elapsed-since";
 
 import { useSettingsStore } from "~/stores";
@@ -81,7 +81,14 @@ export function ReasoningStepPart({
   const preview = expandState === ReasoningCardState.Preview;
 
   return (
-    <div data-part="reasoning" data-reasoning-loading={loading || undefined}>
+    <div
+      data-part="reasoning"
+      data-reasoning-loading={loading || undefined}
+      className={cn(
+        "transition-all duration-300",
+        loading && "rounded-xl border border-amber-500/30 bg-amber-500/[0.03] shadow-[0_0_12px_rgba(245,158,11,0.08)] px-1 py-0.5",
+      )}
+    >
       <ControlledChainOfThoughtStep
         expanded={expandState === ReasoningCardState.Expanded}
         onExpandedChange={onExpandedChange}
@@ -90,14 +97,23 @@ export function ReasoningStepPart({
         active={loading}
         icon={
           loading ? (
-            <Sparkles className="h-4 w-4 animate-pulse text-primary" />
+            <Sparkles className="h-4 w-4 animate-pulse text-amber-500" />
           ) : (
             <Think className="h-4 w-4 text-primary" />
           )
         }
         label={
           <span className="text-foreground text-xs font-medium">
-            {showThinkingTitle
+            {loading ? (
+              <span className="inline-flex items-center gap-1.5 text-amber-500 font-medium">
+                <span className="size-1.5 rounded-full bg-amber-500 animate-ping" />
+                {showThinkingTitle
+                  ? thinkingTitle
+                  : duration !== null
+                    ? `Thinking... ${duration}s`
+                    : t("message_parts.deep_thinking")}
+              </span>
+            ) : showThinkingTitle
               ? thinkingTitle
               : duration !== null
                 ? t("message_parts.thinking_seconds", { seconds: duration })
@@ -105,7 +121,9 @@ export function ReasoningStepPart({
           </span>
         }
         extra={
-          showThinkingTitle && duration !== null ? (
+          !loading && expandState === ReasoningCardState.Collapsed ? (
+            <span className="text-[10px] text-muted-foreground/75 font-normal">Click to expand</span>
+          ) : showThinkingTitle && duration !== null ? (
             <span className="text-muted-foreground text-xs">{duration}s</span>
           ) : undefined
         }
