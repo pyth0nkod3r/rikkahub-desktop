@@ -56,7 +56,7 @@ import {
   workspaceReadTitle,
   workspaceReconTitle,
 } from "./workspace-tool-part";
-import { useToolElapsedSeconds } from "~/hooks/use-elapsed-since";
+import { useElapsedSeconds, useToolElapsedSeconds } from "~/hooks/use-elapsed-since";
 import { AudioPart as AudioPartRenderer } from "./audio-part";
 import { ImagePart as ImagePartRenderer } from "./image-part";
 import { VideoPart as VideoPartRenderer } from "./video-part";
@@ -914,6 +914,8 @@ function ProposePlanToolStep({
 function SubAgentDispatchToolStep({
   tool,
   loading,
+  messageCreatedAt,
+  messageFinishedAt,
 }: ToolPartProps) {
   const { t } = useTranslation("message");
   const navigate = useNavigate();
@@ -952,7 +954,11 @@ function SubAgentDispatchToolStep({
   const isSucceeded = status === "succeeded";
   const isFailed = status === "failed" || status === "timed_out";
   const isCancelled = status === "cancelled";
-  const elapsed = useToolElapsedSeconds(tool.createdAt, tool.finishedAt, isRunning);
+  const startedAtMs = typeof outputObj?.started_at_ms === "number" ? outputObj.started_at_ms : null;
+  const finishedAtMs = typeof outputObj?.finished_at_ms === "number" ? outputObj.finished_at_ms : null;
+  const startedIso = startedAtMs ? new Date(startedAtMs).toISOString() : (typeof tool.metadata?.toolStartedAt === "string" ? (tool.metadata.toolStartedAt as string) : messageCreatedAt);
+  const finishedIso = finishedAtMs ? new Date(finishedAtMs).toISOString() : (typeof tool.metadata?.toolFinishedAt === "string" ? (tool.metadata.toolFinishedAt as string) : messageFinishedAt);
+  const elapsed = useElapsedSeconds(startedIso, finishedIso, isRunning);
 
   const handleCancel = async () => {
     if (!runId) return;

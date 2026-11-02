@@ -48,12 +48,12 @@ export function useElapsedSeconds(startIso: string | undefined, finishIso?: stri
  *  调用方把 loading / awaitingApproval 信号汇成 live 传入。
  *  bash 流式中间帧(partial)不落戳:输出还在长,秒数继续走表直到终局。 */
 export function useToolElapsedSeconds(
-  tool: { metadata?: Record<string, unknown> | null },
+  tool?: { metadata?: Record<string, unknown> | null } | null,
   messageCreatedAt?: string,
   messageFinishedAt?: string | null,
   live = true,
 ): number | null {
-  const meta = tool.metadata;
+  const meta = tool?.metadata;
   const startedAt = typeof meta?.toolStartedAt === "string" ? meta.toolStartedAt : undefined;
   const finishedAt = typeof meta?.toolFinishedAt === "string" ? meta.toolFinishedAt : null;
   if (startedAt) return useElapsedSeconds(startedAt, finishedAt, live);
