@@ -1130,7 +1130,11 @@ export const ChatMessage = React.memo(
         )}
 
         {hasModelCallError ? (
-          <ModelCallErrorCard annotations={message.annotations} settingsSearch={modelSettingsSearch} />
+          <ModelCallErrorCard
+            annotations={message.annotations}
+            settingsSearch={modelSettingsSearch}
+            onRegenerate={onRegenerate ? () => onRegenerate(message.id) : undefined}
+          />
         ) : null}
 
         <ChatMessageAnnotationsRow annotations={message.annotations} alignRight={isUser} />

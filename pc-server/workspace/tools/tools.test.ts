@@ -57,6 +57,18 @@ describe("write(pi 语义)", () => {
     const result = await tool.execute({ path: "nested/deep/new.txt", content: "hello" });
     expect(textOf(result)).toBe("Successfully wrote 5 bytes to nested/deep/new.txt");
     expect(readFileSync(join(dir, "nested/deep/new.txt"), "utf-8")).toBe("hello");
+    expect(result.details).toBeUndefined();
+  });
+
+  test("write diff on overwrite", async () => {
+    const tool = createWriteTool(dir);
+    await tool.execute({ path: "diff-test.txt", content: "line 1\nold line 2\nline 3" });
+    const res = await tool.execute({ path: "diff-test.txt", content: "line 1\nnew line 2\nline 3" });
+    expect(res.details).toBeDefined();
+    expect(res.details?.diff).toContain("-");
+    expect(res.details?.diff).toContain("+");
+    expect(res.details?.diff).toContain("new line 2");
+    expect(res.details?.patch).toContain("diff-test.txt");
   });
 });
 

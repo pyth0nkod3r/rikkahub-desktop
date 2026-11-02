@@ -1,5 +1,5 @@
 import * as React from "react";
-import { ChevronDown, Copy, Settings2, TriangleAlert } from "lucide-react";
+import { ChevronDown, Copy, RefreshCw, Settings2, Sparkles, TriangleAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { SettingsLink } from "~/components/settings/settings-link";
@@ -7,20 +7,22 @@ import { copyTextToClipboard } from "~/lib/clipboard";
 import { cn } from "~/lib/utils";
 import type { UIMessageAnnotation } from "~/types";
 
-// 域1-3/13-3(对齐 Android ErrorCard):模型调用失败的呈现唯一入口。错误详情只来自
-// model_call_error 注解的 message 字段(正文零污染),卡片持久挂在失败消息下方——
-// 桌面端不照抄 APP 的 5 秒浮动卡,但信息要素等价:标题 + 完整错误 + 复制 + 设置跳转。
+// ??????????????? + ????/??????? + ?? + ?????
 
-/** 错误详情超过该长度时折叠为预览,点击展开全文。 */
+/** ???????????????,??????? */
 const ERROR_PREVIEW_LENGTH = 200;
 
 export function ModelCallErrorCard({
   annotations,
   settingsSearch,
+  onRegenerate,
+  onCompress,
 }: {
   annotations: UIMessageAnnotation[] | undefined;
-  /** 设置深链查询串(定位到出错模型所属的供应商)。 */
+  /** ???????(?????????????)? */
   settingsSearch: string;
+  onRegenerate?: () => void | Promise<void>;
+  onCompress?: () => void | Promise<void>;
 }) {
   const { t } = useTranslation("message");
   const errorMessage =
@@ -28,6 +30,7 @@ export function ModelCallErrorCard({
     null;
   const [expanded, setExpanded] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
+  const [retrying, setRetrying] = React.useState(false);
   const copyTimerRef = React.useRef<number | null>(null);
 
   React.useEffect(
@@ -39,9 +42,14 @@ export function ModelCallErrorCard({
 
   if (!errorMessage) return null;
 
+  const isContextOverflow =
+    /context|token|overflow|upstream_request_rejected|bad_response_status_code|maximum context length/i.test(
+      errorMessage,
+    );
+
   const collapsible = errorMessage.length > ERROR_PREVIEW_LENGTH;
   const shownMessage =
-    expanded || !collapsible ? errorMessage : `${errorMessage.slice(0, ERROR_PREVIEW_LENGTH)}…`;
+    expanded || !collapsible ? errorMessage : `${errorMessage.slice(0, ERROR_PREVIEW_LENGTH)}...`;
 
   const handleCopy = async () => {
     try {
@@ -50,7 +58,17 @@ export function ModelCallErrorCard({
       if (copyTimerRef.current != null) window.clearTimeout(copyTimerRef.current);
       copyTimerRef.current = window.setTimeout(() => setCopied(false), 1400);
     } catch {
-      // 剪贴板不可用(权限拒绝等)时保持卡片其余交互可用
+      // ?????????????????
+    }
+  };
+
+  const handleRetry = async () => {
+    if (!onRegenerate || retrying) return;
+    try {
+      setRetrying(true);
+      await onRegenerate();
+    } finally {
+      setRetrying(false);
     }
   };
 
@@ -73,7 +91,42 @@ export function ModelCallErrorCard({
           {expanded ? t("chat_message.collapse_error") : t("chat_message.expand_error")}
         </button>
       ) : null}
-      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+
+      {isContextOverflow ? (
+        <div className="mt-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-500 dark:text-amber-400">
+          <div className="font-semibold flex items-center gap-1.5">
+            <span>Context Limit Exceeded</span>
+          </div>
+          <p className="mt-0.5 text-[11px] leading-4 opacity-90">
+            The conversation history exceeded the model token capacity. Compacting history will summarize older messages and free up tokens.
+          </p>
+        </div>
+      ) : null}
+
+      <div className="mt-2.5 flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+        {onRegenerate ? (
+          <button
+            className="inline-flex items-center gap-1.5 rounded-md border border-destructive/40 bg-destructive/20 hover:bg-destructive/30 text-destructive font-medium px-2.5 py-1 text-xs transition"
+            type="button"
+            onClick={() => void handleRetry()}
+            disabled={retrying}
+          >
+            <RefreshCw className={cn("size-3", retrying && "animate-spin")} />
+            <span>{retrying ? "Retrying..." : "Retry / Regenerate"}</span>
+          </button>
+        ) : null}
+
+        {isContextOverflow && onCompress ? (
+          <button
+            className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/20 hover:bg-amber-500/30 text-amber-600 dark:text-amber-400 font-medium px-2.5 py-1 text-xs transition"
+            type="button"
+            onClick={() => void onCompress()}
+          >
+            <Sparkles className="size-3" />
+            <span>Compact & Retry</span>
+          </button>
+        ) : null}
+
         <button
           className="inline-flex items-center gap-1 rounded-md border border-destructive/30 bg-card/60 px-2 py-1 text-xs transition hover:bg-accent"
           type="button"

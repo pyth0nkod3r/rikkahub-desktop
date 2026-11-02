@@ -1,7 +1,8 @@
 import * as React from "react";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
-import { Bot, Pencil, Plus, X } from "lucide-react";
+import { Bot, ChevronDown, Pencil, Plus, X } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "~/components/ui/popover";
 import { toast } from "sonner";
 
 import { Button } from "~/components/ui/button";
@@ -86,6 +87,139 @@ function TabTooltipBody({ conversationId, title }: { conversationId: string; tit
         </div>
       ) : null}
     </>
+  );
+}
+
+
+function SubagentHub({
+  container,
+  paneIndex,
+  subagentTabs,
+  titleById,
+  activeTab,
+  onSelect,
+  onClose,
+  onCloseAll,
+}: {
+  container: ContainerKey;
+  paneIndex: number;
+  subagentTabs: string[];
+  titleById: Map<string, string>;
+  activeTab: string | null;
+  onSelect: (id: string) => void;
+  onClose: (id: string) => void;
+  onCloseAll: () => void;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const engineStatus = useConversationStore((s) => s.engineStatus);
+
+  const hasAwaiting = React.useMemo(
+    () => subagentTabs.some((id) => engineStatus[id]?.phase === "awaiting_approval"),
+    [subagentTabs, engineStatus],
+  );
+  const hasRunning = React.useMemo(
+    () => subagentTabs.some((id) => Boolean(engineStatus[id]?.busy)),
+    [subagentTabs, engineStatus],
+  );
+
+  const isActiveInSubagents = activeTab !== null && subagentTabs.includes(activeTab);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          data-tab-nav="1"
+          className={cn(
+            "group relative flex h-[26px] shrink-0 items-center gap-1.5 rounded-lg px-2 text-compact font-medium transition-colors duration-150 select-none",
+            isActiveInSubagents
+              ? "bg-[var(--ds-on-surface)] text-[var(--ds-text-primary)] shadow-[inset_0_0_0_0.5px_var(--ds-divider)]"
+              : "text-[var(--ds-text-secondary)] hover:bg-[var(--ds-on-surface)] hover:text-foreground",
+          )}
+        >
+          <Bot className="size-3.5 text-primary shrink-0" strokeWidth={2} />
+          <span>Subagents</span>
+          <span className="rounded-full bg-primary/10 px-1.5 py-0.2 text-[10px] font-semibold text-primary tabular-nums">
+            {subagentTabs.length}
+          </span>
+          {hasAwaiting ? (
+            <span className="size-1.5 animate-pulse rounded-full bg-amber-500" title="Awaiting approval" />
+          ) : hasRunning ? (
+            <span className="size-1.5 animate-pulse rounded-full bg-emerald-500" title="Running" />
+          ) : null}
+          <ChevronDown className={cn("size-3 opacity-60 transition-transform duration-150", open && "rotate-180")} />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" sideOffset={6} className="w-80 p-0 shadow-lg border border-border/80 bg-card">
+        <div className="flex items-center justify-between border-b border-border/50 px-3 py-2 bg-muted/30">
+          <div className="flex items-center gap-1.5">
+            <Bot className="size-4 text-primary" />
+            <span className="text-xs font-semibold text-foreground">Active Subagents</span>
+            <span className="rounded-full bg-primary/15 px-1.5 py-0.2 text-[10px] font-mono text-primary font-medium">
+              {subagentTabs.length}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              onCloseAll();
+              setOpen(false);
+            }}
+            className="text-[11px] text-muted-foreground hover:text-destructive transition-colors"
+          >
+            Close All
+          </button>
+        </div>
+        <div className="max-h-72 overflow-y-auto p-1 divide-y divide-border/20">
+          {subagentTabs.map((id) => {
+            const raw = titleById.get(id) ?? "Subagent";
+            const cleanTitle = raw.replace(/^\[Sub-agent\]\s*/i, "") || raw;
+            const isItemActive = id === activeTab;
+            const status = engineStatus[id];
+            const isAwaiting = status?.phase === "awaiting_approval";
+            const isBusy = Boolean(status?.busy);
+
+            return (
+              <div
+                key={id}
+                className={cn(
+                  "group flex items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-xs transition-colors cursor-pointer",
+                  isItemActive
+                    ? "bg-primary/10 text-primary font-medium"
+                    : "hover:bg-accent/60 text-foreground/90",
+                )}
+                onClick={() => {
+                  onSelect(id);
+                  setOpen(false);
+                }}
+              >
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  {isAwaiting ? (
+                    <span className="size-2 shrink-0 animate-pulse rounded-full bg-amber-500" />
+                  ) : isBusy ? (
+                    <span className="size-2 shrink-0 animate-pulse rounded-full bg-emerald-500" />
+                  ) : (
+                    <span className="size-1.5 shrink-0 rounded-full bg-muted-foreground/40" />
+                  )}
+                  <span className="truncate">{cleanTitle}</span>
+                </div>
+                <button
+                  type="button"
+                  title="Close tab"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onClose(id);
+                  }}
+                  className="size-5 shrink-0 flex items-center justify-center rounded text-muted-foreground opacity-60 hover:opacity-100 hover:bg-muted/80 hover:text-foreground transition"
+                >
+                  <X className="size-3" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -182,7 +316,7 @@ export function ConversationTabStrip({
       }}
     >
       <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none]">
-      {tabs.map((conversationId, index) => {
+      {tabsToRender.map((conversationId, index) => {
         const active = conversationId === activeConversation;
         const rawTitle = titleById.get(conversationId)?.trim() || t("workspace.tabs.untitled");
         const isSubagent = rawTitle.startsWith("[Sub-agent]");
@@ -305,7 +439,27 @@ export function ConversationTabStrip({
           </ContextMenu>
         );
       })}
-      {tabs.some((id) => (titleById.get(id) ?? "").startsWith("[Sub-agent]")) ? (
+      {subagentTabs.length > 2 ? (
+        <SubagentHub
+          container={container}
+          paneIndex={paneIndex}
+          subagentTabs={subagentTabs}
+          titleById={titleById}
+          activeTab={activeConversation}
+          onSelect={(id) => {
+            useContainerTabsStore.getState().focusPane(container, paneIndex);
+            navigate(`/c/${id}`);
+          }}
+          onClose={(id) => handleClose(id)}
+          onCloseAll={() => {
+            subagentTabs.forEach((id) => {
+              useContainerTabsStore.getState().closeConversation(container, id);
+            });
+            toast.success("Closed all subagent tabs");
+          }}
+        />
+      ) : null}
+      {subagentTabs.length <= 2 && subagentTabs.length > 0 ? (
         <button
           type="button"
           title="Close all subagent tabs"

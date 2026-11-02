@@ -3,7 +3,8 @@
 // 逐字保留(mkdir 自动建父目录、字节数回执、mutation queue 内查 abort 的不变量);
 // TUI 渲染弃用。schema 从 TypeBox 转写为等价 OpenAI JSON Schema(字段/描述原文)。
 
-import { mkdir as fsMkdir, writeFile as fsWriteFile } from "node:fs/promises";
+import { mkdir as fsMkdir, readFile as fsReadFile, writeFile as fsWriteFile } from "node:fs/promises";
+import { generateDiffString, generateUnifiedPatch, normalizeToLF, stripBom } from "./edit-diff";
 import { dirname } from "node:path";
 import { withFileMutationQueue } from "./file-mutation-queue";
 import { resolveToCwd } from "./path-utils";
@@ -12,6 +13,15 @@ import type { WorkspaceToolDefinition } from "./types";
 export interface WriteToolInput {
   path: string;
   content: string;
+}
+
+export interface WriteToolDetails {
+  /** Display-oriented diff of the changes made */
+  diff?: string;
+  /** Standard unified patch of the changes made */
+  patch?: string;
+  /** Line number of the first change in the new file (for editor navigation) */
+  firstChangedLine?: number;
 }
 
 /**
@@ -23,11 +33,14 @@ export interface WriteOperations {
   writeFile: (absolutePath: string, content: string) => Promise<void>;
   /** Create directory recursively */
   mkdir: (dir: string) => Promise<void>;
+  /** Read file contents as a Buffer if available */
+  readFile?: (absolutePath: string) => Promise<Buffer>;
 }
 
 const defaultWriteOperations: WriteOperations = {
   writeFile: (path, content) => fsWriteFile(path, content, "utf-8"),
   mkdir: (dir) => fsMkdir(dir, { recursive: true }).then(() => {}),
+  readFile: (path) => fsReadFile(path),
 };
 
 export interface WriteToolOptions {
@@ -47,7 +60,7 @@ const WRITE_SCHEMA = {
 export function createWriteTool(
   cwd: string,
   options?: WriteToolOptions,
-): WorkspaceToolDefinition<WriteToolInput, undefined> {
+): WorkspaceToolDefinition<WriteToolInput, WriteToolDetails | undefined> {
   const ops = options?.operations ?? defaultWriteOperations;
   return {
     name: "write",
@@ -67,6 +80,16 @@ export function createWriteTool(
         };
 
         throwIfAborted();
+        let previousContent: string | null = null;
+        try {
+          const readOp = ops.readFile ?? fsReadFile;
+          const buf = await readOp(absolutePath);
+          previousContent = buf.toString("utf-8");
+        } catch {
+          previousContent = null;
+        }
+        throwIfAborted();
+
         // Create parent directories if needed.
         await ops.mkdir(dir);
         throwIfAborted();
@@ -75,9 +98,25 @@ export function createWriteTool(
         await ops.writeFile(absolutePath, content);
         throwIfAborted();
 
+        let details: WriteToolDetails | undefined = undefined;
+        if (previousContent !== null) {
+          const { text: cleanPrev } = stripBom(previousContent);
+          const baseContent = normalizeToLF(cleanPrev);
+          const newContent = normalizeToLF(content);
+          if (baseContent !== newContent) {
+            const diffResult = generateDiffString(baseContent, newContent);
+            const patch = generateUnifiedPatch(path, baseContent, newContent);
+            details = {
+              diff: diffResult.diff,
+              patch,
+              firstChangedLine: diffResult.firstChangedLine,
+            };
+          }
+        }
+
         return {
           content: [{ type: "text" as const, text: `Successfully wrote ${content.length} bytes to ${path}` }],
-          details: undefined,
+          details,
         };
       });
     },

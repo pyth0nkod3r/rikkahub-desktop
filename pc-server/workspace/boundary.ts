@@ -98,6 +98,7 @@ async function readWithHardLimit(safePath: string, displayPath: string): Promise
 /** write 工具的有界 Operations:边界断言 + 2MB 写闸门;mkdir 同样受界。 */
 export function createBoundedWriteOperations(root: string): WriteOperations {
   return {
+    readFile: (absolutePath) => readWithHardLimit(assertInsideWorkspace(absolutePath, root), absolutePath),
     // async 包裹:边界断言的同步 throw 统一成 rejected promise(Operations 契约)
     writeFile: async (absolutePath, content) => writeWithHardLimit(assertInsideWorkspace(absolutePath, root), content, "Content"),
     mkdir: async (dir) => {
@@ -191,6 +192,7 @@ export function createWideReadOperations(): ReadOperations {
 /** write 工具的宽界 Operations(经批准的区外写入 / full_access):无路径黑名单,2MB 闸门照旧。 */
 export function createWideWriteOperations(root: string): WriteOperations {
   return {
+    readFile: (absolutePath) => readWithHardLimit(canonicalizeWithNonexistentTail(absolutePath), absolutePath),
     writeFile: async (absolutePath, content) => writeWithHardLimit(assertWideWritablePath(absolutePath, root), content, "Content"),
     mkdir: async (dir) => {
       await fsMkdir(assertNotWindowsReservedName(assertWideWritablePath(dir, root)), { recursive: true });

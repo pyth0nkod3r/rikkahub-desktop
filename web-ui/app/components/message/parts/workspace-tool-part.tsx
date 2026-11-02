@@ -210,7 +210,7 @@ function WorkspaceActionBody({ view }: { view: WorkspaceActionView }) {
       </pre>
     );
   }
-  if (model.kind === "edit") return <DiffView diff={diff} />;
+  if (model.kind === "edit" || (model.kind === "write" && diff)) return <DiffView diff={diff} />;
   if (model.kind === "bash") {
     return model.text || running ? (
       <TerminalOutput text={model.text} running={running} />
@@ -236,8 +236,8 @@ function WorkspaceActionDrawer({ view, toolName }: { view: WorkspaceActionView; 
         {model.kind !== "bash" && path ? (
           <div className="break-all font-mono text-xs text-muted-foreground">{path}</div>
         ) : null}
-        {model.kind === "edit" && diff ? <DiffView diff={diff} className="rounded-md border" /> : null}
-        {writeContent !== null ? (
+        {(model.kind === "edit" || (model.kind === "write" && diff)) && diff ? <DiffView diff={diff} className="rounded-md border" /> : null}
+        {writeContent !== null && !diff ? (
           <div className="overflow-hidden rounded-md border bg-muted/20">
             {/* 高亮体无外壳,抽屉自备边框容器(pre 沿用默认 p-3 内边距,仅收字号);
                 复制仍走抽屉原 CopyButton(贴容器右上) */}
@@ -454,7 +454,7 @@ export function WorkspaceActionStep({
   const hasBody =
     model.kind === "bash"
       ? Boolean(model.text) || running
-      : model.kind === "edit"
+      : model.kind === "edit" || Boolean(view.diff)
         ? Boolean(view.diff)
         : Boolean(str(model.args, "content"));
 
