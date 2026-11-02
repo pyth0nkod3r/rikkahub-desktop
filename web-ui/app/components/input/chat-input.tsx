@@ -412,6 +412,18 @@ function ChatInputInner({
     enabled: slashEnabled,
     onCompleteText: onValueChange,
   });
+
+  const paneContainer = usePaneContainer();
+  const activeWorkspaceId = useWorkspaceStore((state) => {
+    if (paneContainer !== CHAT_CONTAINER) return paneContainer;
+    return state.workspaces[0]?.id ?? null;
+  });
+  const fileMention = useFileMention({
+    text: value,
+    workspaceId: activeWorkspaceId,
+    enabled: ready && !disabled && !isEditing,
+    onCompleteText: onValueChange,
+  });
   // 完整指令判定(拦截与染色共用同一判据);IME 组合中暂停染色——组合串只存在于
   // textarea 层,文字透明会让组合过程不可见。
   const parsedCommand = React.useMemo(
