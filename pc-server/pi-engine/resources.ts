@@ -40,7 +40,7 @@ import { getStringArray, renderTemplate } from "../foundation/utils";
 import { piAgentDir, skillsDir, globalAgentsPath } from "../foundation/paths";
 import { readGlobalAgentsFile } from "../agents/global-agents";
 import { frozenContextBlocks } from "../inference-engine/context-snapshots";
-import { PI_THINKING_BUDGETS } from "./model-bridge";
+import { PI_THINKING_BUDGETS, inferContextWindowFallback } from "./model-bridge";
 import { templateVariables } from "../inference-engine/message-enrichment";
 import { buildSearchContext } from "../search";
 import { reportError } from "../observability/app-errors";
@@ -189,11 +189,13 @@ export async function createPiSessionResources(options: {
   // overflow 自动压缩显式开启(数值与 pi 默认一致,但不再依赖库默认值漂移),
   // reserveTokens/keepRecentTokens 取 pi 默认。重试策略由配置决定(支持大于 3 次)。
   // thinkingBudgets:Google 2.x 预算通道与聊天引擎同数值(model-bridge 四键投影,方言单源)。
+  const effectiveWindow = model.contextLength ?? inferContextWindowFallback(model.modelId);
+  const defaultReserveTokens = effectiveWindow <= 32_768 ? 4_096 : effectiveWindow <= 65_536 ? 8_192 : 16_384;
   const settingsManager = SettingsManager.inMemory(
     {
       compaction: {
         enabled: (assistant as any).autoCompaction !== false,
-        reserveTokens: 32_768,
+        reserveTokens: defaultReserveTokens,
         ...(compactionKeepRecentTokens != null ? { keepRecentTokens: compactionKeepRecentTokens } : {}),
       },
       thinkingBudgets: { ...PI_THINKING_BUDGETS },

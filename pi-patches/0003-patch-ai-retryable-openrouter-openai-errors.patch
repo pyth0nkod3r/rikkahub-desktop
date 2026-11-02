@@ -1,0 +1,42 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Miracle Anyanwu <m.anyanwu@stu.unizik.edu.ng>
+Date: Mon, 2 Nov 2026 15:30:00 +0100
+Subject: [PATCH] patch(ai): retryable provider errors and overflow patterns for openrouter and openai proxies
+
+---
+ packages/ai/src/utils/overflow.ts | 2 ++
+ packages/ai/src/utils/retry.ts    | 8 ++++++++
+ 2 files changed, 10 insertions(+)
+
+diff --git a/packages/ai/src/utils/overflow.ts b/packages/ai/src/utils/overflow.ts
+index c1e6457f..aea2f6ac 100644
+--- a/packages/ai/src/utils/overflow.ts
++++ b/packages/ai/src/utils/overflow.ts
+@@ -59,6 +59,8 @@ const OVERFLOW_PATTERNS = [
+ 	/context[_ ]length[_ ]exceeded/i, // Generic fallback
+ 	/too many tokens/i, // Generic fallback
+ 	/token limit exceeded/i, // Generic fallback
++	/upstream_request_rejected/i, // Upstream proxy rejecting oversized requests (Kiosapi/OneAPI)
++	/bad_response_status_code/i, // Upstream model error on oversized context
+ 	/^4(?:00|13)\s*(?:status code)?\s*\(no body\)/i, // Cerebras: 400/413 with no body
+ ];
+ 
+diff --git a/packages/ai/src/utils/retry.ts b/packages/ai/src/utils/retry.ts
+index 743421ea..e69f12a1 100644
+--- a/packages/ai/src/utils/retry.ts
++++ b/packages/ai/src/utils/retry.ts
+@@ -41,6 +41,14 @@ const RETRYABLE_PROVIDER_ERROR_PATTERN = buildProviderErrorPattern([
+ 	// Wrapper/provider text for transient upstream failures, including OpenRouter
+ 	// "Provider returned error" responses (#2264).
+ 	"provider.?returned.?error",
++	"provider.?finish_reason",
++	"finish_reason.?error",
++	"finish_reason",
++	"openai_error",
++	"upstream_request_rejected",
++	"bad_response_status_code",
++	"invalid_response_status_code",
++	"bad_gateway",
+ 	"exceeded request buffer limit while retrying upstream",
+ 
+ 	// Network, proxy, and fetch transport failures. This includes OpenAI Codex

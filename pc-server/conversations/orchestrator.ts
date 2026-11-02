@@ -49,7 +49,7 @@ import {
 } from "../inference-engine/providers";
 import { buildInteractionsRequestBody, streamInteractionsChatWithTools } from "../inference-engine/interactions";
 import { contextWindowFor, requiredOutputCap } from "../model-providers/model-limits";
-import { DEFAULT_CONTEXT_WINDOW, inferContextWindowFallback } from "../pi-engine/model-bridge";
+import { inferContextWindowFallback } from "../pi-engine/model-bridge";
 import {
   finishReasoningParts,
   finishToolParts,
@@ -754,20 +754,7 @@ function piModelLimitsFor(provider: Provider, model: Model, assistant: Assistant
   const modelContext = typeof model.contextLength === "number" && model.contextLength > 0 ? model.contextLength : null;
   const catalogWindow = contextWindowFor(modelsDevCache, provider, model.modelId);
   const fallbackWindow = inferContextWindowFallback(model.modelId);
-  let contextWindow = modelContext ?? catalogWindow ?? fallbackWindow;
-  if (conversation && modelContext == null && catalogWindow == null && fallbackWindow === DEFAULT_CONTEXT_WINDOW) {
-    let maxObservedTokens = 0;
-    for (const msg of selectedConversationMessages(conversation)) {
-      const tokens = msg.usage?.promptTokens ?? 0;
-      if (tokens > maxObservedTokens) maxObservedTokens = tokens;
-    }
-    if (maxObservedTokens > 0) {
-      const observedFloor = maxObservedTokens + 32_768;
-      if (observedFloor > contextWindow) {
-        contextWindow = observedFloor;
-      }
-    }
-  }
+  const contextWindow = modelContext ?? catalogWindow ?? fallbackWindow;
   return {
     contextWindow,
     maxTokens: requiredOutputCap(modelsDevCache, provider, model.modelId, assistant.maxTokens),
