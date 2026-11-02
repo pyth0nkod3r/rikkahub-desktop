@@ -276,3 +276,18 @@ export function internalOutputCap(
   const cap = outputLimitFor(catalog, provider, modelId);
   return cap != null && cap < desired ? cap : desired;
 }
+
+// ??????????????(?? x-context-length / x-ratelimit-limit-tokens ???)
+const observedModelLimits = new Map<string, number>();
+
+export function recordObservedModelContextWindow(providerId: string, modelId: string, limit: number): void {
+  if (!providerId || !modelId || limit <= 0) return;
+  const key = `${providerId.toLowerCase()}:${modelId.toLowerCase()}`;
+  observedModelLimits.set(key, limit);
+}
+
+export function getObservedModelContextWindow(providerId: string, modelId: string): number | null {
+  if (!providerId || !modelId) return null;
+  const key = `${providerId.toLowerCase()}:${modelId.toLowerCase()}`;
+  return observedModelLimits.get(key) ?? null;
+}

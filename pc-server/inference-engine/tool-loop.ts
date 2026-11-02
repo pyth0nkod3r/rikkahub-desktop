@@ -22,6 +22,7 @@ import { extractDsmlToolCalls, hasDsmlToolDelimiters, sanitizeMessageDsmlParts }
 import type { StreamHooksWithSink, ToolCall, ToolDispatchContext, ToolResult } from "./events";
 import type { ToolOutputEntry, ToolPart } from "../foundation/types";
 import { jsonBody, textBody } from "../model-providers";
+import { recordObservedModelContextWindow } from "../model-providers/model-limits";
 import { addLog } from "../api/logs";
 import { touchStream } from "../api/sse";
 import { isRecord } from "../foundation/utils";
@@ -242,6 +243,17 @@ export async function runStreamingToolLoop(
     let response: Response;
     try {
       response = await fetchRoundWithHeaderTimeout(adapter, requestBody, round, signal, nonStreamRound);
+      // ???????????(OpenRouter / ?????:x-context-length / x-ratelimit-limit-tokens)
+      const ctxHeader = response.headers.get("x-context-length")
+        || response.headers.get("x-ratelimit-limit-tokens")
+        || response.headers.get("x-ratelimit-limit-tokens-per-minute");
+      if (ctxHeader) {
+        const parsed = parseInt(ctxHeader, 10);
+        if (!isNaN(parsed) && parsed >= 1000) {
+          const model = typeof requestBody.model === "string" ? requestBody.model : "";
+          recordObservedModelContextWindow(adapter.providerItem.id, model, parsed);
+        }
+      }
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       logRound(adapter, round, roundStarted, requestBody, { ok: false, status: 0, responseBody: "", error: detail });

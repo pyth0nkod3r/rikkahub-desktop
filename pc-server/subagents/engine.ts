@@ -13,6 +13,8 @@ import { generateAnswer } from "../conversations/orchestrator";
 import { abortGeneration, generating } from "../conversations/generation-state";
 import { broadcastConversation, broadcastList, broadcastNodeUpdate } from "../api/sse";
 import { findAssistant } from "../conversations/helpers";
+import { getWorkspace } from "../workspace";
+import { createSubAgentWorktree, getSubAgentWorktreeDiff, removeSubAgentWorktree, type SubAgentWorktree } from "../workspace/worktree";
 import {
   SubAgentDefaults,
   SubAgentRequestValidator,
@@ -287,6 +289,8 @@ export class SubAgentEngine {
       noResult: cleaned.noResult,
       timeoutSeconds: cleaned.timeoutSeconds,
       maxTrips: cleaned.maxTrips,
+      isolateWorktree: cleaned.isolateWorktree,
+      worktreeDiff: null,
       status: "pending",
       result: null,
       error: null,
@@ -414,6 +418,18 @@ export class SubAgentEngine {
     // Create isolated conversation
     const subConvId = newId();
     const now = Date.now();
+
+    // Isolated Git Worktree (Benchmark: Claude Code / OpenHands)
+    let worktree: SubAgentWorktree | null = null;
+    if (workspaceId && request.isolateWorktree) {
+      const ws = getWorkspace(workspaceId);
+      if (ws) {
+        worktree = createSubAgentWorktree(ws, subConvId);
+        if (worktree) {
+          workspaceCwd = worktree.path;
+        }
+      }
+    }
     const subConversation: Conversation = {
       id: subConvId,
       assistantId: effectiveAssistantId,
@@ -514,6 +530,11 @@ When you have finished, end with one short paragraph in plain text that summaris
       const updatedConv = getConversation(subConvId) ?? subConversation;
       const finalText = this.harvestFinalText(updatedConv);
 
+      let worktreeDiff: string | null = null;
+      if (worktree) {
+        worktreeDiff = getSubAgentWorktreeDiff(worktree.path) || null;
+      }
+
       let tokensIn = 0;
       let tokensOut = 0;
       let tripCount = 0;
@@ -533,6 +554,7 @@ When you have finished, end with one short paragraph in plain text that summaris
         ...r,
         status: "succeeded",
         result: finalText,
+        worktreeDiff,
         tokensIn,
         tokensOut,
         tripCount,
@@ -608,6 +630,9 @@ When you have finished, end with one short paragraph in plain text that summaris
       broadcastList();
       this.notifyParentIfBackground(parentChatId, this.registry.get(runId));
     } finally {
+      if (worktree) {
+        removeSubAgentWorktree(worktree);
+      }
       SubAgentToolPolicies.unregister(subConvId);
       this.registry.clearJob(runId);
     }

@@ -235,6 +235,7 @@ export function searchWorkspaceFiles(
 
   const IGNORED = new Set([
     "node_modules",
+    ".rikkahub-worktrees",
     ".git",
     "dist",
     "build",

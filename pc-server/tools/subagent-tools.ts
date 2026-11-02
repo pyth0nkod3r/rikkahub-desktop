@@ -43,6 +43,8 @@ export function encodeRun(run: SubAgentRun): Record<string, JsonValue> {
   } else if (run.noResult) {
     result.result_suppressed = true;
   }
+  if (run.isolateWorktree) result.isolate_worktree = run.isolateWorktree;
+  if (run.worktreeDiff != null) result.worktree_diff = run.worktreeDiff;
   if (run.error != null) result.error = run.error;
   return result;
 }
@@ -101,6 +103,10 @@ Pass a clear, self-contained task. For long-running work, set run_in_background=
               type: "array",
               items: { type: "string" },
               description: `Opt-in capability categories. Sub-agents get workspace tools by default. Grant more with: ${validCaps}.`,
+            },
+            isolate_worktree: {
+              type: "boolean",
+              description: "If true, isolates the sub-agent into an independent git worktree branch to avoid file collisions with concurrent tasks.",
             },
             run_in_background: {
               type: "boolean",
@@ -243,6 +249,7 @@ export async function executeSubAgentTool(
       noResult: Boolean(args.no_result),
       timeoutSeconds: args.timeout_seconds ? Number(args.timeout_seconds) : undefined,
       maxTrips: args.max_trips ? Number(args.max_trips) : undefined,
+      isolateWorktree: Boolean(args.isolate_worktree),
     });
 
     if (!res.ok) {

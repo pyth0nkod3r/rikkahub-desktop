@@ -69,6 +69,8 @@ export interface SubAgentRun {
   tokensIn: number;
   tokensOut: number;
   tripCount: number;
+  isolateWorktree?: boolean;
+  worktreeDiff?: string | null;
 }
 
 export interface SubAgentRequest {
@@ -83,6 +85,7 @@ export interface SubAgentRequest {
   maxTrips?: number;
   capabilities?: string[] | null;
   label?: string | null;
+  isolateWorktree?: boolean;
 }
 
 export type SubAgentRequestValidationResult =
