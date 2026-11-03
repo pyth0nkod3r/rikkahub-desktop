@@ -18,6 +18,7 @@ import { BrowserSection } from "~/components/settings/extensions/browser";
 import { PromptInjectionSection } from "~/components/settings/extensions/injection";
 import { QuickMessagesSection } from "~/components/settings/extensions/quick-messages";
 import { SkillsSection } from "~/components/settings/extensions/skills";
+import { AgentHarnessSection } from "~/components/settings/extensions/harness";
 import { SubAgentsSection } from "~/components/settings/extensions/subagents";
 import { AutomationSection } from "~/components/settings/extensions/automation";
 import { RemoteSection } from "~/components/settings/extensions/remote";
@@ -93,6 +94,7 @@ export const SETTINGS_PAGES: Record<SettingsPageKey, React.ComponentType<Setting
   "network/search": SearchSection,
   "network/proxy": ProxySection,
   "network/port": PortRequestSection,
+  "extensions/harness": AgentHarnessSection,
   "extensions/mcp": McpSection,
   "extensions/skills": SkillsSection,
   "extensions/workspace": WorkspaceSection,

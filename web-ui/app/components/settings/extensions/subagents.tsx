@@ -165,6 +165,8 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useNavigate } from "react-router";
+import { Zap } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "~/components/ui/popover";
 import { AIIcon } from "~/components/ui/ai-icon";
@@ -241,6 +243,7 @@ const AVAILABLE_CAPABILITIES = [
 
 export function SubAgentsSection({ settings }: { settings: Settings; onSettings: (s: Settings) => void }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = React.useState<"profiles" | "runs">("profiles");
 
   // Profiles State
@@ -386,7 +389,18 @@ export function SubAgentsSection({ settings }: { settings: Settings; onSettings:
             )}
           </p>
         </div>
-        <div className="flex rounded-lg bg-muted p-1">
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => navigate("/settings?section=extensions&sub=harness")}
+            className="h-8 gap-1.5 text-xs font-medium"
+          >
+            <Zap className="h-3.5 w-3.5 text-primary" />
+            <span>Harness & Ergonomics</span>
+          </Button>
+          <div className="flex rounded-lg bg-muted p-1">
           <button
             type="button"
             onClick={() => setActiveTab("profiles")}
@@ -411,6 +425,7 @@ export function SubAgentsSection({ settings }: { settings: Settings; onSettings:
           >
             {t("settings:subagents.tab_runs", "Active Runs")}
           </button>
+        </div>
         </div>
       </div>
 

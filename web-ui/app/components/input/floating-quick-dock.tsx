@@ -14,6 +14,7 @@ import { useConversationStore } from "~/stores/conversation-store";
 import { useWorkspaceLayoutStore } from "~/stores/workspace-layout-store";
 import type { ConversationListDto } from "~/types";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/tooltip";
+import { useSettingsStore } from "~/stores/app-store";
 
 interface FloatingQuickDockProps {
   conversationId: string | null;
@@ -29,6 +30,10 @@ export function FloatingQuickDock({
   className,
 }: FloatingQuickDockProps) {
   const { t } = useTranslation();
+  const displaySetting = useSettingsStore((s) => s.settings?.displaySetting);
+  if (displaySetting?.enableFloatingQuickDock === false) {
+    return null;
+  }
 
   const widthMode = useWorkspaceLayoutStore((s) => s.widthMode);
   const toggleWidthMode = useWorkspaceLayoutStore((s) => s.toggleWidthMode);

@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { CopyButton } from "~/components/ui/copy-button";
 import { cn } from "~/lib/utils";
+import { useSettingsStore } from "~/stores/app-store";
 
 // 终端输出块(工作区 M2-3,方案 §4.3/§4.5):bash 动作卡的流式输出区。
 // 有界渲染纪律:流式期间只 slice 尾部 MAX_VISIBLE_LINES 行进普通 <pre>——
@@ -25,14 +26,20 @@ export function TerminalOutput({
   const scrollRef = React.useRef<HTMLDivElement | null>(null);
   const followRef = React.useRef(true);
 
+  const displaySetting = useSettingsStore((s) => s.settings?.displaySetting);
+  const maxVisible =
+    typeof displaySetting?.terminalFoldLines === "number" && displaySetting.terminalFoldLines > 0
+      ? displaySetting.terminalFoldLines
+      : 30;
+
   const { visible, hiddenLines } = React.useMemo(() => {
     const lines = text.split("\n");
-    if (lines.length <= MAX_VISIBLE_LINES) return { visible: text, hiddenLines: 0 };
+    if (lines.length <= maxVisible) return { visible: text, hiddenLines: 0 };
     return {
-      visible: lines.slice(lines.length - MAX_VISIBLE_LINES).join("\n"),
-      hiddenLines: lines.length - MAX_VISIBLE_LINES,
+      visible: lines.slice(lines.length - maxVisible).join("\n"),
+      hiddenLines: lines.length - maxVisible,
     };
-  }, [text]);
+  }, [text, maxVisible]);
 
   React.useEffect(() => {
     const el = scrollRef.current;

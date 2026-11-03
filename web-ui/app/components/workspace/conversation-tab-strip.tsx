@@ -26,6 +26,7 @@ import { cn } from "~/lib/utils";
 import { useContainerTabsStore, type ContainerKey } from "~/stores/container-tabs-store";
 import { useConversationStore } from "~/stores/conversation-store";
 import { useTabDragStore } from "~/stores/tab-drag-store";
+import { useSettingsStore } from "~/stores/app-store";
 import type { ConversationListDto } from "~/types";
 
 // 二层会话标签(工作区 M2-1;前端重构A1 复刻参考项目):白色内容面板的顶缘胶囊行,
@@ -159,16 +160,30 @@ function SubagentHub({
               {subagentTabs.length}
             </span>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              onCloseAll();
-              setOpen(false);
-            }}
-            className="text-[11px] text-muted-foreground hover:text-destructive transition-colors"
-          >
-            Close All
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                navigate("/settings?section=extensions&sub=harness");
+                setOpen(false);
+              }}
+              title="Agent Harness & Ergonomics Settings"
+              className="text-[11px] text-muted-foreground hover:text-primary transition-colors"
+            >
+              Settings
+            </button>
+            <span className="text-border/60">·</span>
+            <button
+              type="button"
+              onClick={() => {
+                onCloseAll();
+                setOpen(false);
+              }}
+              className="text-[11px] text-muted-foreground hover:text-destructive transition-colors"
+            >
+              Close All
+            </button>
+          </div>
         </div>
         <div className="max-h-72 overflow-y-auto p-1 divide-y divide-border/20">
           {subagentTabs.map((id) => {
@@ -275,15 +290,19 @@ export function ConversationTabStrip({
     return { regularTabs: reg, subagentTabs: sub };
   }, [tabs, titleById]);
 
+  const displaySetting = useSettingsStore((state) => state.settings?.displaySetting);
+  const hubThreshold = typeof displaySetting?.subagentHubThreshold === "number" ? displaySetting.subagentHubThreshold : 2;
+  const shouldCollapse = hubThreshold > 0 && subagentTabs.length > hubThreshold;
+
   const tabsToRender = React.useMemo(() => {
-    if (subagentTabs.length <= 2) {
+    if (!shouldCollapse) {
       return tabs;
     }
     if (activeConversation && subagentTabs.includes(activeConversation)) {
       return [...regularTabs, activeConversation];
     }
     return regularTabs;
-  }, [tabs, regularTabs, subagentTabs, activeConversation]);
+  }, [tabs, regularTabs, subagentTabs, activeConversation, shouldCollapse]);
 
   const handleClose = (conversationId: string) => {
     const next = useContainerTabsStore.getState().closeConversation(container, conversationId);
@@ -463,7 +482,7 @@ export function ConversationTabStrip({
           </ContextMenu>
         );
       })}
-      {subagentTabs.length > 2 ? (
+      {shouldCollapse ? (
         <SubagentHub
           container={container}
           paneIndex={paneIndex}
@@ -483,7 +502,7 @@ export function ConversationTabStrip({
           }}
         />
       ) : null}
-      {subagentTabs.length <= 2 && subagentTabs.length > 0 ? (
+      {!shouldCollapse && subagentTabs.length > 0 ? (
         <button
           type="button"
           title="Close all subagent tabs"

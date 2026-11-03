@@ -38,6 +38,7 @@ import {
 import type { ToolPart as UIToolPart } from "~/types";
 
 import { ControlledChainOfThoughtStep } from "../chain-of-thought";
+import { useSettingsStore } from "~/stores/app-store";
 
 // 工作区工具渲染器(M2-3,方案 §4.3;2026-09-05 抽屉合并修订)。可见性分层:
 // - read(只读侦察)留在思维链折叠组(tool-part.tsx 只借本模块的标题/图标);
@@ -194,6 +195,8 @@ function useWorkspaceActionView(
 /** 展开区正文(卡/步骤共用):denied/error 分支仅失败卡可达(失败即抽出,不进链)。 */
 function WorkspaceActionBody({ view }: { view: WorkspaceActionView }) {
   const { t, model, running, diff, path } = view;
+  const displaySetting = useSettingsStore((s) => s.settings?.displaySetting);
+  const showDiff = displaySetting?.enableWriteDiffViewer !== false;
   if (model.denied) {
     return (
       <div className="px-3 py-2 text-xs text-destructive">
@@ -210,7 +213,7 @@ function WorkspaceActionBody({ view }: { view: WorkspaceActionView }) {
       </pre>
     );
   }
-  if (model.kind === "edit" || (model.kind === "write" && diff)) return <DiffView diff={diff} />;
+  if ((model.kind === "edit" || (model.kind === "write" && showDiff)) && diff) return <DiffView diff={diff} />;
   if (model.kind === "bash") {
     return model.text || running ? (
       <TerminalOutput text={model.text} running={running} />
@@ -224,6 +227,8 @@ function WorkspaceActionBody({ view }: { view: WorkspaceActionView }) {
 /** 全量详情抽屉(卡/步骤共用):参数/DiffView/写入正文/结果/错误/patch。 */
 function WorkspaceActionDrawer({ view, toolName }: { view: WorkspaceActionView; toolName: string }) {
   const { t, model, drawerOpen, setDrawerOpen, path, command, diff, patch, title } = view;
+  const displaySetting = useSettingsStore((s) => s.settings?.displaySetting);
+  const showDiff = displaySetting?.enableWriteDiffViewer !== false;
   const writeContent = model.kind === "write" ? (str(model.args, "content") ?? "") : null;
   return (
     <DetailDrawer
@@ -236,7 +241,7 @@ function WorkspaceActionDrawer({ view, toolName }: { view: WorkspaceActionView; 
         {model.kind !== "bash" && path ? (
           <div className="break-all font-mono text-xs text-muted-foreground">{path}</div>
         ) : null}
-        {(model.kind === "edit" || (model.kind === "write" && diff)) && diff ? <DiffView diff={diff} className="rounded-md border" /> : null}
+        {(model.kind === "edit" || (model.kind === "write" && showDiff)) && diff ? <DiffView diff={diff} className="rounded-md border" /> : null}
         {writeContent !== null && !diff ? (
           <div className="overflow-hidden rounded-md border bg-muted/20">
             {/* 高亮体无外壳,抽屉自备边框容器(pre 沿用默认 p-3 内边距,仅收字号);

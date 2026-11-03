@@ -287,9 +287,9 @@ export class SubAgentEngine {
       capabilities: cleaned.capabilities ? Array.from(cleaned.capabilities) : null,
       runInBackground: cleaned.runInBackground,
       noResult: cleaned.noResult,
-      timeoutSeconds: cleaned.timeoutSeconds,
-      maxTrips: cleaned.maxTrips,
-      isolateWorktree: cleaned.isolateWorktree,
+      timeoutSeconds: cleaned.timeoutSeconds ?? (typeof (state as any)?.settings?.displaySetting?.subagentDefaultTimeoutSeconds === "number" ? (state as any).settings.displaySetting.subagentDefaultTimeoutSeconds : SubAgentDefaults.DEFAULT_TIMEOUT_SECONDS),
+      maxTrips: cleaned.maxTrips ?? (typeof (state as any)?.settings?.displaySetting?.subagentDefaultMaxTrips === "number" ? (state as any).settings.displaySetting.subagentDefaultMaxTrips : SubAgentDefaults.DEFAULT_MAX_TRIPS),
+      isolateWorktree: cleaned.isolateWorktree ?? ((state as any)?.settings?.displaySetting?.enableWorktreeIsolation !== false),
       worktreeDiff: null,
       status: "pending",
       result: null,
@@ -573,7 +573,8 @@ When you have finished, end with one short paragraph in plain text that summaris
 
       // Automatic Model Fallback Cascade for subagent failure
       const runRecord = this.registry.get(runId);
-      if (!isAbort && runRecord && !runRecord.attemptedModel) {
+      const fallbackEnabled = (state as any)?.settings?.displaySetting?.enableModelFallbackCascade !== false;
+      if (!isAbort && runRecord && !runRecord.attemptedModel && fallbackEnabled) {
         const fallbackModelId = state?.settings?.fastModelId || state?.settings?.chatModelId;
         if (fallbackModelId && fallbackModelId !== subConversation.chatModelId) {
           const originalModel = subConversation.chatModelId ?? "default";

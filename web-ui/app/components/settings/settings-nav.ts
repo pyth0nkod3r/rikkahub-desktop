@@ -70,6 +70,7 @@ export const SETTINGS_NAV = [
     labelKey: "settings:nav.extensions",
     icon: Blocks,
     children: [
+      { id: "harness", labelKey: "settings:subnav.extensions.harness" },
       { id: "mcp", labelKey: "settings:subnav.extensions.mcp" },
       { id: "skills", labelKey: "settings:subnav.extensions.skills" },
       { id: "workspace", labelKey: "settings:subnav.extensions.workspace" },

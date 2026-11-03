@@ -403,7 +403,13 @@ function ChatInputInner({
   // 生成中禁用(与压缩互斥同语义)。清单为空 = 指令在此环境不存在(禁用不可见)。
   const [imeComposing, setImeComposing] = React.useState(false);
   const commandOverlayRef = React.useRef<HTMLDivElement | null>(null);
+  const displaySetting = useSettingsStore((s) => s.settings?.displaySetting);
+  const slashConfigEnabled = displaySetting?.enableSlashCommandMenu !== false;
+  const fileMentionConfigEnabled = displaySetting?.enableFileMentionAutocomplete !== false;
+  const steerConfigEnabled = displaySetting?.enableMidStreamSteering !== false;
+
   const slashEnabled =
+    slashConfigEnabled &&
     ready && !disabled && !isGenerating && !isEditing && attachments.length === 0 && Boolean(onSlashCommand);
   const availableSlashCommands = slashEnabled ? (slashCommands ?? EMPTY_SLASH_COMMANDS) : EMPTY_SLASH_COMMANDS;
   const slash = useSlashCommand({
@@ -421,7 +427,7 @@ function ChatInputInner({
   const fileMention = useFileMention({
     text: value,
     workspaceId: activeWorkspaceId,
-    enabled: ready && !disabled && !isEditing,
+    enabled: fileMentionConfigEnabled && ready && !disabled && !isEditing,
     onCompleteText: onValueChange,
   });
   // 完整指令判定(拦截与染色共用同一判据);IME 组合中暂停染色——组合串只存在于
@@ -1148,7 +1154,7 @@ function ChatInputInner({
                 </Button>
               ) : null}
               <ModelList disabled={!canSwitchModel} conversationId={conversationId} />
-              {isGenerating && !isEmpty ? (
+              {isGenerating && !isEmpty && steerConfigEnabled ? (
                 <Button
                   type="button"
                   variant="outline"
