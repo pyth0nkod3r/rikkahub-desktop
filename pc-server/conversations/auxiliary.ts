@@ -7,7 +7,7 @@ import { state } from "../persistence/json-store";
 import { broadcastConversation, broadcastEngineStatus } from "../api/sse";
 import { DEFAULT_AUTO_MODEL_ID, applyCustomBody, applyRequestHeaders, findModel } from "../model-providers";
 import { applyShaping, resolveProviderAuthForProvider, shapingFor } from "../model-providers/auth";
-import { endpointFor } from "../model-providers/checks";
+import { endpointFor, isOpenAiResponseApi } from "../model-providers/checks";
 import { openAiMaxTokensField, reasoningLevelNormalized } from "../model-providers/request-dialect";
 import { internalOutputCap, requiredOutputCap } from "../model-providers/model-limits";
 import {
@@ -231,7 +231,7 @@ export async function fetchAuxiliaryText(modelId: string, prompt: string, kind: 
     return fetchText(endpoint, headers, applyCustomBody(shaped(body), assistant, modelItem), providerItem, (raw) => raw.content?.map((item: { text?: string }) => item.text ?? "").join("\n"), signal);
   }
   if (providerItem.authMode !== "oauth") headers.Authorization = `Bearer ${providerItem.apiKey}`;
-  body = providerItem.useResponseApi
+  body = isOpenAiResponseApi(providerItem)
     ? {
         model: selectedModel,
         input: [{ role: "user", content: prompt }],
@@ -392,7 +392,7 @@ async function fetchAuxiliaryOcrText(imageUrl: string) {
   }
 
   if (providerItem.authMode !== "oauth") headers.Authorization = `Bearer ${providerItem.apiKey}`;
-  body = providerItem.useResponseApi
+  body = isOpenAiResponseApi(providerItem)
     ? {
         model: selectedModel,
         input: [{

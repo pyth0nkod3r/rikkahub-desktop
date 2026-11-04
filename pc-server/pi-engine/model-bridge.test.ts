@@ -43,6 +43,16 @@ describe("piApiFor 协议映射矩阵", () => {
       "openai-responses",
     );
   });
+
+  it("openai + chatCompletionsPath: /responses → openai-responses (align with Android)", () => {
+    expect(
+      piApiFor(makeProvider({ id: "p1", name: "AgentRouter", baseUrl: "https://agentrouter.org/v1", chatCompletionsPath: "/responses" })),
+    ).toBe("openai-responses");
+    expect(
+      piApiFor(makeProvider({ id: "p2", name: "AgentRouter", baseUrl: "https://agentrouter.org/v1", chatCompletionsPath: "/v1/responses" })),
+    ).toBe("openai-responses");
+  });
+
   it("openai + 自定义补全路径 → 无法映射", () => {
     expect(
       piApiFor(makeProvider({ id: "p1", name: "P", baseUrl: "https://x", chatCompletionsPath: "/api/v3/chat" })),

@@ -1,3 +1,4 @@
+export { isOpenAiResponseApi } from "./checks";
 // pc-server/model-providers/index.ts — Provider/Model 配置与元数据
 // 纪律：负责 Provider 和 Model 的默认值、能力推断、排序与迁移常量；不直接写 state.json。
 
@@ -509,7 +510,10 @@ export function defaultProviders(): Provider[] {
 export function findModel(modelId: string | null | undefined) {
   const wanted = modelId || state.settings.chatModelId;
   for (const provider of state.settings.providers) {
-    const modelItem = provider.models.find((item) => item.id === wanted || item.modelId === wanted);
+    const wantedLower = wanted?.toLowerCase();
+    const modelItem =
+      provider.models.find((item) => item.id === wanted || item.modelId === wanted)
+      ?? (wantedLower ? provider.models.find((item) => item.modelId?.toLowerCase() === wantedLower || item.id?.toLowerCase() === wantedLower) : undefined);
     if (modelItem) {
       // Per-model provider override: if this model carries a `providerOverwrite` object,
       // it replaces the parent provider entirely for outbound requests (baseUrl, apiKey,
@@ -623,6 +627,18 @@ function applyHostSpecialHeaders(headers: Record<string, string>, providerItem: 
   }
 }
 
+export function setHeaderCaseInsensitive(headers: Record<string, string>, name: string, value: string) {
+  const cleanName = name.trim();
+  if (!cleanName) return;
+  const lower = cleanName.toLowerCase();
+  for (const existingKey of Object.keys(headers)) {
+    if (existingKey.toLowerCase() === lower && existingKey !== cleanName) {
+      delete headers[existingKey];
+    }
+  }
+  headers[cleanName] = value;
+}
+
 export function applyModelRequestHeaders(
   headers: Record<string, string>,
   providerItem: Provider,
@@ -633,7 +649,7 @@ export function applyModelRequestHeaders(
   // 先铺(同名被上层覆盖),对齐安卓 ProviderSetting.mergeCustomHeaders 的优先级语义。
   for (const header of [...providerCustomHeaderRecords(providerItem), ...modelCustomHeaderRecords(modelItem)]) {
     const name = String(header.name ?? header.key ?? "").trim();
-    if (name) headers[name] = String(header.value ?? "");
+    if (name) setHeaderCaseInsensitive(headers, name, String(header.value ?? ""));
   }
   applyHostSpecialHeaders(headers, providerItem);
   applySessionHeaders(headers, providerItem.baseUrl, sessionId);
@@ -652,7 +668,7 @@ export function applyRequestHeaders(
   // 用户显式配置。
   for (const header of [...providerCustomHeaderRecords(providerItem), ...customHeaderRecords(assistant, modelItem)]) {
     const name = String(header.name ?? header.key ?? "").trim();
-    if (name) headers[name] = String(header.value ?? "");
+    if (name) setHeaderCaseInsensitive(headers, name, String(header.value ?? ""));
   }
   applyHostSpecialHeaders(headers, providerItem);
   applySessionHeaders(headers, providerItem.baseUrl, sessionId);
@@ -726,7 +742,10 @@ export function normalizeFetchedModels(providerItem: Provider, raw: any): Model[
   const items = providerItem.type === "google" ? raw.models ?? [] : raw.data ?? raw.models ?? [];
   const existingByModelId = new Map<string, Model>();
   for (const m of providerItem.models ?? []) {
-    if (m.modelId) existingByModelId.set(m.modelId, m);
+    if (m.modelId) {
+      existingByModelId.set(m.modelId, m);
+      existingByModelId.set(m.modelId.toLowerCase(), m);
+    }
   }
   const models = (Array.isArray(items) ? items : [])
     .map((item: any) => {
@@ -734,11 +753,14 @@ export function normalizeFetchedModels(providerItem: Provider, raw: any): Model[
       const modelId = rawId.replace(/^models\//, "");
       if (!modelId) return null;
       const displayName = String(item.display_name ?? item.displayName ?? item.name ?? modelId).replace(/^models\//, "");
-      const existing = existingByModelId.get(modelId);
+      const existing = existingByModelId.get(modelId) ?? existingByModelId.get(modelId.toLowerCase());
       const base = model(modelId, displayName || modelId);
       if (existing?.id) base.id = existing.id;
       if (existing?.contextLength && !base.contextLength) base.contextLength = existing.contextLength;
       if (existing?.maxTokens && !base.maxTokens) base.maxTokens = existing.maxTokens;
+      if (existing?.customHeaders?.length) base.customHeaders = existing.customHeaders;
+      if (existing?.customBodies?.length) base.customBodies = existing.customBodies;
+      if (existing?.providerOverwrite) base.providerOverwrite = existing.providerOverwrite;
       return enrichModel(base, item);
     })
     .filter(Boolean) as Model[];
@@ -759,12 +781,20 @@ export function firstProviderModel(providerItem: Provider, preferredModelId?: st
   throw new Error("No test model is available. Fetch the provider model list or select a model first.");
 }
 
-export function providerTestModel(providerItem: Provider, selectedModel: string, fetchedModels: Model[] = []) {
-  return (
-    providerItem.models.find((item) => item.modelId === selectedModel || item.id === selectedModel)
-    ?? fetchedModels.find((item) => item.modelId === selectedModel || item.id === selectedModel)
-    ?? model(selectedModel, selectedModel)
-  );
+export function providerTestModel(providerItem: Provider, selectedModel: string, fetchedModels: Model[] = []): Model {
+  const needle = (selectedModel || "").trim();
+  const needleLower = needle.toLowerCase();
+  const configured =
+    providerItem.models.find((item) => item.modelId === needle || item.id === needle)
+    ?? providerItem.models.find((item) => item.modelId.toLowerCase() === needleLower || item.id.toLowerCase() === needleLower);
+  if (configured) return configured;
+
+  const fetched =
+    fetchedModels.find((item) => item.modelId === needle || item.id === needle)
+    ?? fetchedModels.find((item) => item.modelId.toLowerCase() === needleLower || item.id.toLowerCase() === needleLower);
+  if (fetched) return fetched;
+
+  return model(selectedModel, selectedModel);
 }
 
 export function providerTestCorePassed(checks: Array<{ mode: string; ok: boolean }>) {

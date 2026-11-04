@@ -10,7 +10,7 @@ import { classifyContextOverflowError, classifyOAuthCredentialError, classifyOut
 import { state } from "../persistence/json-store";
 import { addLog } from "../api/logs";
 import { broadcastConversation, broadcastEngineStatus, broadcastList, broadcastNodeUpdate, touchStream } from "../api/sse";
-import { applyCustomBody, applyRequestHeaders, findModel } from "../model-providers";
+import { applyCustomBody, applyRequestHeaders, findModel, isOpenAiResponseApi } from "../model-providers";
 import { resolveProviderAuthForProvider, applyShaping } from "../model-providers/auth";
 import { endpointFor } from "../model-providers/checks";
 import { openAiMaxTokensField, reasoningLevelNormalized } from "../model-providers/request-dialect";
@@ -264,7 +264,7 @@ export async function callProvider(
   // 有此事;responses 形态安卓无对应。conversation.id 即会话身份(与 prompt_cache_key 同物)。
   const openRouterSessionId =
     hostOfProvider(providerItem) === "openrouter.ai" ? conversation.id : undefined;
-  if (providerItem.useResponseApi) {
+  if (isOpenAiResponseApi(providerItem)) {
     const functionTools = supportsAbility(picked.model, "TOOL") ? conversationFunctionTools(assistant, picked.model) : [];
     const builtInTools = responseApiBuiltInTools(picked.model);
     const systemContent = conversationResponseApiInstructions(conversation, assistant);
@@ -379,7 +379,7 @@ export async function callProviderStreaming(
     // 把本函数已解析的快照透传，确保 claude/google 路径与 openai 路径读到同一代配置
     return callProvider(conversation, ctx.signal, hooks, { assistant, provider: picked.provider, model: picked.model });
   }
-  if (providerItem.useResponseApi) {
+  if (isOpenAiResponseApi(providerItem)) {
     const responseTools = [
       ...tools.map(responseApiFunctionTool),
       ...responseApiBuiltInTools(picked.model),

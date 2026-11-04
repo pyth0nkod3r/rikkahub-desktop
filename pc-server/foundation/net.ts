@@ -356,7 +356,18 @@ export function installProxyFetchInterceptor(getProxyConfig: () => ProxyConfig):
         headers.set("accept-encoding", "identity");
         headersMutated = true;
       }
-      if (!headers.has("user-agent")) {
+      const rawHeaders = effectiveInit?.headers;
+      let hasCustomUa = false;
+      if (rawHeaders) {
+        if (rawHeaders instanceof Headers) {
+          hasCustomUa = rawHeaders.has("user-agent");
+        } else if (Array.isArray(rawHeaders)) {
+          hasCustomUa = rawHeaders.some(([k]) => k.toLowerCase() === "user-agent");
+        } else {
+          hasCustomUa = Object.keys(rawHeaders).some((k) => k.toLowerCase() === "user-agent");
+        }
+      }
+      if (!hasCustomUa && !headers.has("user-agent")) {
         headers.set("user-agent", resolveUserAgent(getProxyConfig()));
         headersMutated = true;
       }

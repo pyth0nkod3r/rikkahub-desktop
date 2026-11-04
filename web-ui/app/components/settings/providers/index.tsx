@@ -577,13 +577,17 @@ export function ProvidersSection({
                           ? textValue(draft.responsesPath) || "/responses"
                           : textValue(draft.chatCompletionsPath) || defaultPathForKind(kind)
                       }
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        const val = event.target.value;
+                        const isResp = val.trim().replace(/\/+$/, "").endsWith("/responses");
                         patchDraft(
-                          draft.useResponseApi === true
-                            ? { responsesPath: event.target.value }
-                            : { chatCompletionsPath: event.target.value },
-                        )
-                      }
+                          isResp
+                            ? { useResponseApi: true, responsesPath: val, chatCompletionsPath: val }
+                            : draft.useResponseApi === true
+                              ? { responsesPath: val }
+                              : { chatCompletionsPath: val }
+                        );
+                      }}
                     />
                   </SettingsField>
                 </div>

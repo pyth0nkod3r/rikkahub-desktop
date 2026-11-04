@@ -17,7 +17,7 @@ import { ModelRuntime } from "../../pi/packages/coding-agent/src/core/model-runt
 import type { ProviderConfigInput } from "../../pi/packages/coding-agent/src/core/provider-composer.ts";
 import type { Model, Provider } from "../foundation/types";
 import { hostOfProvider } from "../inference-engine/message-builder";
-import { applyModelRequestHeaders } from "../model-providers";
+import { applyModelRequestHeaders, isOpenAiResponseApi } from "../model-providers";
 import { createPiCredentialStore, isOAuthProvider, oauthFlowFor } from "../model-providers/auth";
 import {
   ARK_SEED2_EFFORT_BY_LEVEL,
@@ -129,8 +129,8 @@ export function piApiFor(provider: Provider): KnownApi | null {
   if (provider.type === "claude") return "anthropic-messages";
   if (provider.type === "google") return "google-generative-ai";
   if (provider.type === "openai") {
-    if (provider.useResponseApi) return "openai-responses";
-    // pi 的 OpenAI 客户端（官方 SDK）固定拼 /chat/completions，自定义补全路径无法透传。
+    if (isOpenAiResponseApi(provider)) return "openai-responses";
+    // pi 的 OpenAI 客户端固定拼 /chat/completions，自定义补全路径无法透传。
     const path = provider.chatCompletionsPath || "/chat/completions";
     return path === "/chat/completions" ? "openai-completions" : null;
   }
@@ -138,12 +138,14 @@ export function piApiFor(provider: Provider): KnownApi | null {
 }
 
 function piBaseUrlFor(provider: Provider, api: KnownApi): string {
-  const base = provider.baseUrl.replace(/\/+$/, "");
-  // claude 归一化(A,两引擎同款):剥尾部 /v1——pi 的 anthropic SDK 自己拼 /v1/messages;
-  // 聊天引擎 endpointFor 同规则(剥 /v1 再拼 /v1/messages),用户带不带 /v1 两引擎皆通。
-  // openai(SDK 拼 /chat/completions 或 /responses)与 google(两侧 base 均含 /v1beta)
-  // 约定一致,逐字透传。
-  if (api === "anthropic-messages") return base.replace(/\/v1$/, "");
+  let base = provider.baseUrl.replace(/\/+$/, "");
+  if (api === "openai-responses") {
+    base = base.replace(/\/responses$/, "");
+  } else if (api === "openai-completions") {
+    base = base.replace(/\/chat\/completions$/, "");
+  } else if (api === "anthropic-messages") {
+    base = base.replace(/\/v1$/, "");
+  }
   return base;
 }
 
@@ -639,7 +641,7 @@ export function mapProviderModelToPi(provider: Provider, model: Model, limits?: 
       ok: false,
       reason:
         provider.type === "openai"
-          ? `自定义补全路径 ${provider.chatCompletionsPath} 无法映射到 pi 引擎（其 OpenAI 客户端固定使用 /chat/completions）`
+          ? `自定义补全路径 ${provider.chatCompletionsPath} 无法映射到 pi 引擎（其 OpenAI 客户端固定使用 /chat/completions 或 /responses）`
           : `provider 类型 ${provider.type} 无法映射到 pi 引擎`,
     };
   }

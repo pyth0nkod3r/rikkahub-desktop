@@ -420,3 +420,67 @@ describe("runProviderCheck:订阅供应商整形(§13.3 整形全路径覆盖)",
     }
   });
 });
+
+describe("isOpenAiResponseApi & per-model customHeaders in checks", () => {
+  it("isOpenAiResponseApi detects /responses and /v1/responses across all paths", () => {
+    const { isOpenAiResponseApi } = require("./checks");
+    expect(isOpenAiResponseApi({ type: "openai", chatCompletionsPath: "/responses" })).toBe(true);
+    expect(isOpenAiResponseApi({ type: "openai", chatCompletionsPath: "/v1/responses" })).toBe(true);
+    expect(isOpenAiResponseApi({ type: "openai", responsesPath: "/responses" })).toBe(true);
+    expect(isOpenAiResponseApi({ type: "openai", baseUrl: "https://agentrouter.org/v1/responses" })).toBe(true);
+    expect(isOpenAiResponseApi({ type: "openai", useResponseApi: true })).toBe(true);
+    expect(isOpenAiResponseApi({ type: "openai", chatCompletionsPath: "/chat/completions" })).toBe(false);
+    expect(isOpenAiResponseApi({ type: "claude", chatCompletionsPath: "/responses" })).toBe(false);
+  });
+
+  it("normalizeFetchedModels preserves model customHeaders and providerOverwrite", () => {
+    const { normalizeFetchedModels } = require("./index");
+    const provider = {
+      id: "p-test",
+      name: "AgentRouter",
+      type: "openai",
+      baseUrl: "https://agentrouter.org/v1",
+      models: [
+        {
+          id: "m-1",
+          modelId: "gpt-5.6-sol",
+          displayName: "GPT-5.6 Sol",
+          customHeaders: [{ name: "User-Agent", value: "KiloCode/4.103.0" }, { name: "X-KiloCode-Version", value: "4.103.0" }],
+          providerOverwrite: { apiKey: "custom-key" },
+        },
+      ],
+    };
+    const rawData = {
+      data: [{ id: "gpt-5.6-sol", display_name: "GPT-5.6 Sol" }, { id: "gpt-6.1-sol" }],
+    };
+    const models = normalizeFetchedModels(provider, rawData);
+    const m1 = models.find((m) => m.modelId === "gpt-5.6-sol");
+    expect(m1).toBeDefined();
+    expect(m1.customHeaders).toEqual([
+      { name: "User-Agent", value: "KiloCode/4.103.0" },
+      { name: "X-KiloCode-Version", value: "4.103.0" },
+    ]);
+    expect(m1.providerOverwrite).toEqual({ apiKey: "custom-key" });
+  });
+
+  it("providerTestModel matches case-insensitively and returns customHeaders", () => {
+    const { providerTestModel } = require("./index");
+    const provider = {
+      id: "p-test",
+      name: "AgentRouter",
+      type: "openai",
+      baseUrl: "https://agentrouter.org/v1",
+      models: [
+        {
+          id: "m-1",
+          modelId: "GPT-5.6-Sol",
+          displayName: "GPT-5.6 Sol",
+          customHeaders: [{ name: "User-Agent", value: "KiloCode/4.103.0" }],
+        },
+      ],
+    };
+    const resolved = providerTestModel(provider, "gpt-5.6-sol");
+    expect(resolved.modelId).toBe("GPT-5.6-Sol");
+    expect(resolved.customHeaders).toEqual([{ name: "User-Agent", value: "KiloCode/4.103.0" }]);
+  });
+});

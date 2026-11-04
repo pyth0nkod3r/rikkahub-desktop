@@ -31,13 +31,28 @@ export function isGeminiOAuthProvider(providerItem: Provider): boolean {
   );
 }
 
+export function isOpenAiResponseApi(providerItem?: Partial<Provider> | null): boolean {
+  if (!providerItem || providerItem.type !== "openai") return false;
+  if (providerItem.useResponseApi === true) return true;
+  const chatPath = (providerItem.chatCompletionsPath ?? "").trim().replace(/\/+$/, "");
+  if (chatPath === "/responses" || chatPath === "/v1/responses" || chatPath.endsWith("/responses")) return true;
+  const resPath = (providerItem.responsesPath ?? "").trim().replace(/\/+$/, "");
+  if (resPath === "/responses" || resPath === "/v1/responses" || resPath.endsWith("/responses")) return true;
+  const baseUrl = (providerItem.baseUrl ?? "").trim().replace(/\/+$/, "");
+  if (baseUrl.endsWith("/responses")) return true;
+  return false;
+}
+
 export function endpointFor(providerItem: Provider, baseUrlOverride?: string) {
   const base = (baseUrlOverride?.trim() || providerItem.baseUrl).replace(/\/+$/, "");
   if (providerItem.type === "openai") {
-    // responsesPath 留空回落 /responses(对齐安卓 §2.3,适配 Azure/网关非标准路径)。
-    return providerItem.useResponseApi
-      ? `${base}${providerItem.responsesPath?.trim() || "/responses"}`
-      : `${base}${providerItem.chatCompletionsPath || "/chat/completions"}`;
+    if (isOpenAiResponseApi(providerItem)) {
+      const resPath = providerItem.responsesPath?.trim();
+      const chatPath = providerItem.chatCompletionsPath?.trim();
+      const chosen = resPath || (chatPath && chatPath.replace(/\/+$/, "").endsWith("/responses") ? chatPath : "/responses");
+      return `${base}${chosen.startsWith("/") ? chosen : `/${chosen}`}`;
+    }
+    return `${base}${providerItem.chatCompletionsPath || "/chat/completions"}`;
   }
   // claude 拼接标准化(A):剥尾部 /v1 再拼全路径 /v1/messages——与 pi 引擎 piBaseUrlFor
   // 同款归一化,用户填 https://api.anthropic.com 或 .../v1 都能工作。此前 `${base}/messages`
@@ -400,7 +415,7 @@ function providerTestPayload(providerItem: Provider, mode: "non_stream" | "strea
     }
     return { url: endpointFor(providerItem, baseUrlOverride), body };
   }
-  if (providerItem.useResponseApi) {
+  if (isOpenAiResponseApi(providerItem)) {
     const isCodex =
       providerItem.id === "7ce7e322-b995-4b0c-9d48-42e08dcfcdda" ||
       providerItem.name.toLowerCase() === "codex" ||
