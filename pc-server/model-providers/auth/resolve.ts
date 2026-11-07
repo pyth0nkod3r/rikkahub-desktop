@@ -37,7 +37,7 @@ export async function resolveProviderAuthForProvider(
   if (
     provider.id === "google-gemini-oauth" ||
     provider.id === "2b6c1f84-73ad-4e35-b0c7-1a9e4d5f8c21" ||
-    provider.name.toLowerCase().includes("gemini oauth") ||
+    (provider.name ?? "").toLowerCase().includes("gemini oauth") ||
     provider.oauth?.flow === ("gemini-oauth" as any)
   ) {
     const acc = await geminiAccountRepository.acquireAccount();
@@ -51,7 +51,7 @@ export async function resolveProviderAuthForProvider(
   // 2. ChatGPT (Codex) OAuth Multi-Account Round-Robin
   if (
     provider.id === "7ce7e322-b995-4b0c-9d48-42e08dcfcdda" ||
-    provider.name.toLowerCase() === "codex" ||
+    (provider.name ?? "").toLowerCase() === "codex" ||
     ((provider.id === "98d0557b-0700-41e5-b1d6-ee875a53ae5a" || provider.oauth?.flow === "openai-codex") &&
     codexAccountRepository.listAccounts().length > 0)
   ) {

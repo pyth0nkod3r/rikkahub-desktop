@@ -8,7 +8,7 @@ import type { Assistant, Model, Provider } from "../foundation/types";
 import { state } from "../persistence/json-store";
 import { addLog } from "../api/logs";
 import { findAssistant } from "../assistants";
-import { applyCustomBody, jsonBody, modelsEndpointFor, normalizeFetchedModels, applyRequestHeaders, providerCustomHeaderRecords, providerTestCorePassed, providerTestModel, textBody } from "./index";
+import { applyCustomBody, jsonBody, modelsEndpointFor, normalizeFetchedModels, applyRequestHeaders, modelCustomHeaderRecords, providerCustomHeaderRecords, providerTestCorePassed, providerTestModel, setHeaderCaseInsensitive, textBody } from "./index";
 import { applyShaping, bundledModelsFor, isOAuthProvider, oauthFlowFor, resolveProviderAuthForProvider } from "./auth";
 import { hostOfProvider } from "../inference-engine/message-builder";
 import { deltaReasoningContent, deltaTextContent, modelsDevCache, parseSseChunks, responseEventToDelta, upstreamHttpError } from "../inference-engine/providers";
@@ -34,6 +34,13 @@ export function isGeminiOAuthProvider(providerItem: Provider): boolean {
 export function isOpenAiResponseApi(providerItem?: Partial<Provider> | null): boolean {
   if (!providerItem || providerItem.type !== "openai") return false;
   if (providerItem.useResponseApi === true) return true;
+  if (providerItem.useResponseApi === false) {
+    const chatPath = (providerItem.chatCompletionsPath ?? "").trim().replace(/\/+$/, "");
+    if (chatPath === "/responses" || chatPath === "/v1/responses" || chatPath.endsWith("/responses")) return true;
+    const baseUrl = (providerItem.baseUrl ?? "").trim().replace(/\/+$/, "");
+    if (baseUrl.endsWith("/responses")) return true;
+    return false;
+  }
   const chatPath = (providerItem.chatCompletionsPath ?? "").trim().replace(/\/+$/, "");
   if (chatPath === "/responses" || chatPath === "/v1/responses" || chatPath.endsWith("/responses")) return true;
   const resPath = (providerItem.responsesPath ?? "").trim().replace(/\/+$/, "");
@@ -68,12 +75,15 @@ export function endpointFor(providerItem: Provider, baseUrlOverride?: string) {
  *  供应商级自定义请求头(#1952 三层链的最底层)在这里叠加——models/balance 是仅有的
  *  两条不经 applyRequestHeaders 汇聚函数的出线路,安卓的 listModels/getBalance 同样
  *  带 providerSetting.customHeaders。 */
-async function headersForProvider(providerItem: Provider): Promise<Record<string, string>> {
+async function headersForProvider(providerItem: Provider, modelItem?: Model): Promise<Record<string, string>> {
   const resolved = await resolveProviderAuthForProvider(providerItem);
   const headers: Record<string, string> = { ...resolved.headers };
-  for (const header of providerCustomHeaderRecords(providerItem)) {
+  const modelHeaders = modelCustomHeaderRecords(modelItem);
+  const providerHeaders = providerCustomHeaderRecords(providerItem);
+  const targetHeaders = modelHeaders.length > 0 ? modelHeaders : providerHeaders;
+  for (const header of targetHeaders) {
     const name = String(header.name ?? header.key ?? "").trim();
-    if (name) headers[name] = String(header.value ?? "");
+    if (name) setHeaderCaseInsensitive(headers, name, String(header.value ?? ""));
   }
   return headers;
 }
@@ -92,7 +102,7 @@ function applyOfficialDisplayNames(providerItem: Provider, models: Model[]): Mod
   );
 }
 
-export async function fetchProviderModels(providerItem: Provider) {
+export async function fetchProviderModels(providerItem: Provider, modelItem?: Model) {
   // 订阅供应商:模型目录随包(pi 内建目录),不打上游 /models——Codex 后端与 Kimi coding
   // 端点都没有可用的模型列表接口,打了只会 401/404 让「获取模型列表」和「测试连接」
   // 在第一步就失败。既有 id 按 modelId 保留,刷新目录不换 id。
@@ -228,7 +238,8 @@ export async function fetchProviderModels(providerItem: Provider) {
   }
   const endpoint = modelsEndpointFor(providerItem);
   const started = Date.now();
-  const headers = await headersForProvider(providerItem);
+  const activeModel = modelItem ?? providerItem.models?.find((m) => modelCustomHeaderRecords(m).length > 0);
+  const headers = await headersForProvider(providerItem, activeModel);
   let response: Response;
   try {
     response = await fetchWithTimeout(endpoint, { headers });
@@ -291,7 +302,8 @@ export async function fetchProviderBalance(providerItem: Provider) {
   if (!apiPath) throw new Error("余额 API Path 为空");
   const endpoint = /^https?:\/\//i.test(apiPath) ? apiPath : `${providerItem.baseUrl.replace(/\/+$/, "")}${apiPath.startsWith("/") ? apiPath : `/${apiPath}`}`;
   const started = Date.now();
-  const headers = await headersForProvider(providerItem);
+  const activeModel = providerItem.models?.find((m) => modelCustomHeaderRecords(m).length > 0);
+  const headers = await headersForProvider(providerItem, activeModel);
   let response: Response;
   try {
     response = await fetchWithTimeout(endpoint, { headers });
@@ -434,8 +446,18 @@ function providerTestPayload(providerItem: Provider, mode: "non_stream" | "strea
       body.include = ["reasoning.encrypted_content"];
     }
     if (mode === "tools") {
-      body.tools = [{ type: "function", name: "get_current_time", description: "Get the current date and time.", parameters: { type: "object", properties: {} } }];
-      body.tool_choice = { type: "function", name: "get_current_time" };
+      body.tools = [
+        {
+          type: "function",
+          name: "get_current_time",
+          description: "Get the current date and time.",
+          parameters: { type: "object", properties: {}, required: [] },
+          strict: false,
+        },
+      ];
+      // Do not set body.tool_choice: Android parity (ResponseAPI.kt omits tool_choice).
+      // Prompts like "Use the get_current_time tool." naturally trigger the tool call,
+      // avoiding 500 errors on upstream proxies/Agentrouter caused by unsupported tool_choice.
     }
     return { url: endpointFor(providerItem, baseUrlOverride), body };
   }
@@ -449,15 +471,17 @@ function providerTestPayload(providerItem: Provider, mode: "non_stream" | "strea
   };
   if (mode === "stream" && hostOfProvider(providerItem) !== "api.mistral.ai") body.stream_options = { include_usage: true };
   if (mode === "tools") {
-    body.tools = [{ type: "function", function: { name: "get_current_time", description: "Get the current date and time.", parameters: { type: "object", properties: {} } } }];
-    // Use `"auto"` to match the live request path (conversations/orchestrator.ts) and the Android client
-    // (which never sets tool_choice at all — same as auto by default). The previous shape
-    // `{ type: "function", function: { name: ... } }` is the OpenAI "force this specific
-    // function" format; Deepseek's API doesn't reliably emit standard tool_calls deltas
-    // for that form when streaming, so the test would falsely fail. The user prompt
-    // ("Use the get_current_time tool.") is explicit enough that any well-behaved model
-    // will call the tool under "auto" mode.
-    body.tool_choice = "auto";
+    body.tools = [
+      {
+        type: "function",
+        function: {
+          name: "get_current_time",
+          description: "Get the current date and time.",
+          parameters: { type: "object", properties: {} },
+        },
+      },
+    ];
+    // Do not set body.tool_choice: Android parity (ChatCompletionsAPI.kt leaves tool_choice omitted).
   }
   return { url: endpointFor(providerItem, baseUrlOverride), body };
 }
@@ -536,20 +560,66 @@ async function readProviderTestStream(response: Response, providerItem: Provider
   return preview.trim() || (sawEvent ? "已收到流式事件" : "已建立流式连接，供应商未返回可解析内容");
 }
 
+export function formatToolCallPreview(text: string): string {
+  try {
+    const raw = JSON.parse(text);
+    // 1. OpenAI Responses API (e.g. /responses)
+    if (Array.isArray(raw.output)) {
+      const call = raw.output.find((item: any) => item?.type === "function_call");
+      if (call) {
+        const name = call.name ?? "unknown";
+        const args = typeof call.arguments === "string" ? call.arguments : JSON.stringify(call.arguments ?? {});
+        return `Called: ${name} Args: ${args}`;
+      }
+    }
+    // 2. OpenAI Chat Completions API
+    const choiceMsg = raw.choices?.[0]?.message;
+    if (choiceMsg?.tool_calls && Array.isArray(choiceMsg.tool_calls) && choiceMsg.tool_calls.length > 0) {
+      const first = choiceMsg.tool_calls[0];
+      const name = first.function?.name ?? first.name ?? "unknown";
+      const args = typeof first.function?.arguments === "string" ? first.function?.arguments : JSON.stringify(first.function?.arguments ?? first.arguments ?? {});
+      return `Called: ${name} Args: ${args}`;
+    }
+    // 3. Claude format
+    if (Array.isArray(raw.content)) {
+      const toolUse = raw.content.find((item: any) => item?.type === "tool_use");
+      if (toolUse) {
+        const name = toolUse.name ?? "unknown";
+        const args = typeof toolUse.input === "string" ? toolUse.input : JSON.stringify(toolUse.input ?? {});
+        return `Called: ${name} Args: ${args}`;
+      }
+    }
+    // 4. Gemini format
+    const parts = raw.candidates?.[0]?.content?.parts;
+    if (Array.isArray(parts)) {
+      const fn = parts.find((part: any) => part?.functionCall);
+      if (fn?.functionCall) {
+        const name = fn.functionCall.name ?? "unknown";
+        const args = typeof fn.functionCall.args === "string" ? fn.functionCall.args : JSON.stringify(fn.functionCall.args ?? {});
+        return `Called: ${name} Args: ${args}`;
+      }
+    }
+  } catch {}
+  return textBody(text);
+}
+
 export async function runProviderCheck(providerItem: Provider, mode: "non_stream" | "stream" | "tools", selectedModel: string, fetchedModels: Model[] = []) {
   const modelItem = providerTestModel(providerItem, selectedModel, fetchedModels);
+  const effectiveProvider = (modelItem?.providerOverwrite && typeof modelItem.providerOverwrite === "object" && (modelItem.providerOverwrite as any).type)
+    ? ({ ...providerItem, ...modelItem.providerOverwrite, id: providerItem.id, models: [] } as Provider)
+    : providerItem;
   const assistant = providerTestAssistant(modelItem);
   const started = Date.now();
   // 先解析凭据(可能触发锁内刷新)再拼 URL:订阅供应商的 baseUrl 可能由凭证派生(Copilot)。
-  const resolved = await resolveProviderAuthForProvider(providerItem);
-  const { url, body: rawBody } = providerTestPayload(providerItem, mode, selectedModel, resolved.baseUrl);
+  const resolved = await resolveProviderAuthForProvider(effectiveProvider);
+  const { url, body: rawBody } = providerTestPayload(effectiveProvider, mode, selectedModel, resolved.baseUrl);
   const body = applyCustomBody(rawBody, assistant, modelItem);
   const credentialHeaders = resolved.headers;
   const isCodex =
-    providerItem.id === "7ce7e322-b995-4b0c-9d48-42e08dcfcdda" ||
-    providerItem.name.toLowerCase() === "codex" ||
-    providerItem.oauth?.flow === "openai-codex" ||
-    providerItem.id === "98d0557b-0700-41e5-b1d6-ee875a53ae5a";
+    effectiveProvider.id === "7ce7e322-b995-4b0c-9d48-42e08dcfcdda" ||
+    effectiveProvider.name.toLowerCase() === "codex" ||
+    effectiveProvider.oauth?.flow === "openai-codex" ||
+    effectiveProvider.id === "98d0557b-0700-41e5-b1d6-ee875a53ae5a";
   const isStreamRequest = Boolean(body.stream) || mode === "stream";
   const headers = applyRequestHeaders(
     {
@@ -558,7 +628,7 @@ export async function runProviderCheck(providerItem: Provider, mode: "non_stream
       ...credentialHeaders,
     },
     assistant,
-    providerItem,
+    effectiveProvider,
     modelItem,
   );
   if (isCodex) {
@@ -572,10 +642,10 @@ export async function runProviderCheck(providerItem: Provider, mode: "non_stream
   }
   // 订阅供应商整形与生成链路同一时机:body 定稿后。缺 chatgpt-account-id/OpenAI-Beta 头
   // 的探测请求会被 Codex 后端 400,测试连接对订阅供应商假红(§13.3 整形全路径覆盖)。
-  const flow = oauthFlowFor(providerItem);
+  const flow = oauthFlowFor(effectiveProvider);
   const flowId = flow?.id ?? (isCodex ? "openai-codex" : undefined);
   if (flowId) {
-    const cred = providerItem.oauth?.credential ?? (resolved.accountId ? { accountId: resolved.accountId } : undefined);
+    const cred = effectiveProvider.oauth?.credential ?? (resolved.accountId ? { accountId: resolved.accountId } : undefined);
     applyShaping(flowId, headers, body, cred);
   }
   let response: Response;
@@ -655,12 +725,15 @@ export async function runProviderCheck(providerItem: Provider, mode: "non_stream
     responseBody: textBody(text),
     error: response.ok ? undefined : textBody(text),
   });
+  const previewText = mode === "tools" && response.ok
+    ? formatToolCallPreview(text)
+    : textBody(text || (isStreamRequest && response.ok ? "流式测试已收到事件" : ""));
   return {
     mode,
     ok: response.ok,
     status: response.status,
     endpoint: url,
-    preview: textBody(text || (isStreamRequest && response.ok ? "流式测试已收到事件" : "")),
+    preview: previewText,
   };
 }
 

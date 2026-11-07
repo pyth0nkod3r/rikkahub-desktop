@@ -211,14 +211,33 @@ describe("供应商级自定义请求头(三层链)", () => {
     expect(out["X-Only-Assistant"]).toBe("a");
   });
 
-  it("applyModelRequestHeaders(pi/图像/辅助路径)同样供应商头 < 模型头", () => {
-    const out = applyModelRequestHeaders(
+  it("applyModelRequestHeaders: 优先使用模型自定义头; 仅在模型未配置自定义头时回退到供应商头", () => {
+    // 模型配置了自定义头: 使用模型头, 不混入供应商头
+    const withModelHeaders = applyModelRequestHeaders(
       {},
       at("https://api.deepseek.com/v1", headers([["X-Deep", "provider"], ["X-Shared", "provider"]])),
       { customHeaders: headers([["X-Shared", "model"]]) } as any,
     );
-    expect(out["X-Deep"]).toBe("provider");
-    expect(out["X-Shared"]).toBe("model");
+    expect(withModelHeaders["X-Deep"]).toBeUndefined();
+    expect(withModelHeaders["X-Shared"]).toBe("model");
+
+    // 模型未配置自定义头 (空数组): 回退到供应商头
+    const emptyModelHeaders = applyModelRequestHeaders(
+      {},
+      at("https://api.deepseek.com/v1", headers([["X-Deep", "provider"], ["X-Shared", "provider"]])),
+      { customHeaders: [] } as any,
+    );
+    expect(emptyModelHeaders["X-Deep"]).toBe("provider");
+    expect(emptyModelHeaders["X-Shared"]).toBe("provider");
+
+    // 模型未配置 (undefined): 回退到供应商头
+    const noModel = applyModelRequestHeaders(
+      {},
+      at("https://api.deepseek.com/v1", headers([["X-Deep", "provider"], ["X-Shared", "provider"]])),
+      undefined,
+    );
+    expect(noModel["X-Deep"]).toBe("provider");
+    expect(noModel["X-Shared"]).toBe("provider");
   });
 
   it("空名条目丢弃;缺省字段(undefined)不炸", () => {

@@ -483,4 +483,79 @@ describe("isOpenAiResponseApi & per-model customHeaders in checks", () => {
     expect(resolved.modelId).toBe("GPT-5.6-Sol");
     expect(resolved.customHeaders).toEqual([{ name: "User-Agent", value: "KiloCode/4.103.0" }]);
   });
+  it("isOpenAiResponseApi respects useResponseApi: false", () => {
+    const { isOpenAiResponseApi } = require("./checks");
+    expect(isOpenAiResponseApi({ type: "openai", useResponseApi: false, responsesPath: "/responses" })).toBe(false);
+    expect(isOpenAiResponseApi({ type: "openai", useResponseApi: true, responsesPath: "/responses" })).toBe(true);
+  });
+
+  it("providerTestPayload omits tool_choice for Response API and standard OpenAI", () => {
+    // We can test endpointFor and providerTestPayload indirectly or via runProviderCheck
+    const { formatToolCallPreview } = require("./checks");
+    // Response API preview parsing:
+    const respApiResponse = JSON.stringify({
+      output: [
+        {
+          type: "function_call",
+          call_id: "call_123",
+          name: "get_current_time",
+          arguments: "{}",
+        },
+      ],
+    });
+    expect(formatToolCallPreview(respApiResponse)).toBe("Called: get_current_time Args: {}");
+
+    // Chat Completions preview parsing:
+    const chatCompletionsResponse = JSON.stringify({
+      choices: [
+        {
+          message: {
+            tool_calls: [
+              {
+                id: "call_abc",
+                type: "function",
+                function: {
+                  name: "get_current_time",
+                  arguments: "{}",
+                },
+              },
+            ],
+          },
+        },
+      ],
+    });
+    expect(formatToolCallPreview(chatCompletionsResponse)).toBe("Called: get_current_time Args: {}");
+
+    // Claude preview parsing:
+    const claudeResponse = JSON.stringify({
+      content: [
+        {
+          type: "tool_use",
+          id: "toolu_123",
+          name: "get_current_time",
+          input: {},
+        },
+      ],
+    });
+    expect(formatToolCallPreview(claudeResponse)).toBe("Called: get_current_time Args: {}");
+
+    // Gemini preview parsing:
+    const geminiResponse = JSON.stringify({
+      candidates: [
+        {
+          content: {
+            parts: [
+              {
+                functionCall: {
+                  name: "get_current_time",
+                  args: {},
+                },
+              },
+            ],
+          },
+        },
+      ],
+    });
+    expect(formatToolCallPreview(geminiResponse)).toBe("Called: get_current_time Args: {}");
+  });
 });

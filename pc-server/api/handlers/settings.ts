@@ -44,6 +44,7 @@ import { PI_COMPACTION_PROMPT } from "../../pi-engine/compaction-prompt-text";
 import { updateSettings } from "../../app-config";
 import { markProviderTestResult, providerAuthChanged } from "../../model-providers/checks";
 import { endpointFor, fetchProviderBalance, fetchProviderModels, runProviderCheck } from "../../model-providers/checks";
+import { providerTestModel } from "../../model-providers";
 import { cancelLogin, currentLoginEvent, loginInProgress, logoutProvider, resumePrompt, startLogin } from "../../model-providers/auth";
 
 // 全面审查 R5-4:MCP 服务器写操作按 id 串行化。detail/sync 在 await 网络同步(秒级)
@@ -969,7 +970,17 @@ ${outcome.serverName ? `<p>${esc(outcome.serverName)}</p>` : ""}
     const providerItem = state.settings.providers.find((item) => item.id === body.providerId);
     if (!providerItem) return error("Provider not found", 404);
     try {
-      const result = await fetchProviderModels(providerItem);
+      const requestedModel = body.modelId ? providerTestModel(providerItem, body.modelId) : undefined;
+      let result = {
+        endpoint: endpointFor(providerItem),
+        models: providerItem.models ?? [],
+        preview: "",
+      };
+      try {
+        result = await fetchProviderModels(providerItem, requestedModel);
+      } catch (err) {
+        if (!providerItem.models || providerItem.models.length === 0) throw err;
+      }
       const selectedModel = firstProviderModel(providerItem, body.modelId, result.models);
       const checks = [];
       for (const mode of ["non_stream", "stream", "tools"] as const) {
@@ -1033,7 +1044,17 @@ ${outcome.serverName ? `<p>${esc(outcome.serverName)}</p>` : ""}
         const send = (event: string, payload: JsonValue | object) => controller.enqueue(sseFrame(event, payload));
         try {
           send("progress", { message: "正在读取模型列表..." });
-          const result = await fetchProviderModels(providerItem);
+          const requestedModel = body.modelId ? providerTestModel(providerItem, body.modelId) : undefined;
+          let result = {
+            endpoint: endpointFor(providerItem),
+            models: providerItem.models ?? [],
+            preview: "",
+          };
+          try {
+            result = await fetchProviderModels(providerItem, requestedModel);
+          } catch (err) {
+            if (!providerItem.models || providerItem.models.length === 0) throw err;
+          }
           const selectedModel = firstProviderModel(providerItem, body.modelId, result.models);
           send("models", {
             endpoint: result.endpoint,
