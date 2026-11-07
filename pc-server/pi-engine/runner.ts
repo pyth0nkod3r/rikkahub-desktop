@@ -1,3 +1,4 @@
+import { extractCompletedToolRecords } from "./tool-ledger";
 // pi-engine/runner.ts — pi 会话生成驱动器(P2 骨架;P7 重写为统一会话数据)
 //
 // 一次调用 = 我们会话模型里的一轮生成:注入模型运行时(P1 model-bridge)→ 把 SQLite
@@ -112,6 +113,7 @@ function captureRoundCompactions(
   manager: SessionManager,
   seededEntryIds: Set<string>,
   entryIdsByMessageId: Map<string, string[]>,
+  history?: Message[],
 ): CapturedEngineCompaction[] {
   const captured: CapturedEngineCompaction[] = [];
   for (const entry of manager.getEntries()) {
@@ -123,7 +125,16 @@ function captureRoundCompactions(
         break;
       }
     }
-    captured.push({ cutMessageId, summary: entry.summary, tokensBefore: entry.tokensBefore });
+    let finalSummary = entry.summary;
+    if (history && history.length > 0) {
+      const cutIdx = cutMessageId ? history.findIndex((m) => m.id === cutMessageId) : -1;
+      const priorHistory = cutIdx > 0 ? history.slice(0, cutIdx) : history;
+      const toolLedger = extractCompletedToolRecords(priorHistory, 2048);
+      if (toolLedger && !finalSummary.includes("[Tool execution history")) {
+        finalSummary = finalSummary + "\n\n" + toolLedger;
+      }
+    }
+    captured.push({ cutMessageId, summary: finalSummary, tokensBefore: entry.tokensBefore });
   }
   return captured;
 }
@@ -221,7 +232,7 @@ export async function runPiGeneration(ctx: PiGenerationContext): Promise<PiGener
     clearToolApprovalWaiters(ctx.conversationId);
   }
 
-  const capturedCompactions = captureRoundCompactions(manager, seededEntryIds, seeded.entryIdsByMessageId);
+  const capturedCompactions = captureRoundCompactions(manager, seededEntryIds, seeded.entryIdsByMessageId, ctx.history);
 
   const outcome = bridge.outcome();
   // 上游失败且非用户中止 → 抛给调用方失败分支(与聊天引擎 throw 语义一致)。
@@ -342,7 +353,7 @@ export async function runPiCompaction(ctx: PiCompactionContext): Promise<PiCompa
     const result = await runWithLlmRequestLog(llmLogContextFor(ctx.provider), () =>
       session.compact(ctx.customInstructions?.trim() || undefined),
     );
-    const captured = captureRoundCompactions(manager, seededEntryIds, seeded.entryIdsByMessageId).at(-1);
+    const captured = captureRoundCompactions(manager, seededEntryIds, seeded.entryIdsByMessageId, ctx.history).at(-1);
     if (!captured) {
       // compact 成功却找不到新 compaction 条目 = pi 内部行为漂移,按失败处理比静默丢摘要安全。
       throw new Error("工作区引擎压缩完成但未产生压缩条目");

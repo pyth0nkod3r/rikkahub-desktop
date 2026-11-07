@@ -337,6 +337,8 @@ export interface Conversation {
   agentMode?: "build" | "plan";
   /** 会话级覆盖模型 ID (如子智能体指定模型)。缺省 = 继承助手/全局。 */
   chatModelId?: string | null;
+  /** 标记是否为后台/子智能体无头会话(对齐安卓 HeadlessConversations,不进侧边栏与普通标签页) */
+  isHeadless?: boolean;
 }
 
 // ----- 工作区(agent 模式)领域模型 -----
@@ -586,6 +588,7 @@ export interface PcConversationRow {
   engine_compactions?: string | null;
   agent_mode?: string | null;
   chat_model_id?: string | null;
+  is_headless?: number | null;
 }
 export interface PcMessageNodeRow {
   id: string;

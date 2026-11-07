@@ -239,7 +239,7 @@ export class SubAgentEngine {
     request: SubAgentRequest,
   ): Promise<DispatchResult> {
     // 1. Recursion guard: reject if parent is already a subagent conversation
-    if (parentChatId && SubAgentToolPolicies.isSubAgent(parentChatId)) {
+    if (parentChatId && (SubAgentToolPolicies.isSubAgent(parentChatId) || this.isSubAgentConversation(parentChatId))) {
       return {
         ok: false,
         error: "no_recursion",
@@ -444,6 +444,7 @@ export class SubAgentEngine {
       workspaceId,
       workspaceCwd,
       agentMode: "build",
+      isHeadless: true,
     };
 
     // Prepare task prompt with wrap-up instruction

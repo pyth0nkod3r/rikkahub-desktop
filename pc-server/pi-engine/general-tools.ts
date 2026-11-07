@@ -76,14 +76,14 @@ function toGeneralPiToolResult(entries: ToolOutputEntry[]): PiToolResult {
 
 const GENERAL_TOOL_SNIPPETS: Record<string, string> = {
   subagent_dispatch:
-    "Dispatch a clean-context specialist sub-agent (builder, critic, planner, researcher, designer, merger) for independent, multi-step, or substantive tasks",
+    "Dispatch an isolated sub-agent for substantive, multi-step tasks. Do NOT use for simple conversation, single-step edits, or quick questions.",
   subagent_reinject: "Resume/continue a timed-out or interrupted sub-agent run with the same run ID",
   subagent_get: "Check status and output of a running or completed background sub-agent",
 };
 
 const GENERAL_TOOL_GUIDELINES: Record<string, string[]> = {
   subagent_dispatch: [
-    "When standing instructions, user memories, or orchestration doctrines specify delegating tasks or using sub-agents (builder, critic, planner, researcher, designer), invoke subagent_dispatch rather than executing the work inline yourself.",
+    "Answer direct questions, clarifications, and single-turn tasks yourself inline. Only invoke subagent_dispatch for substantive, multi-step tasks or when the user explicitly requests delegation.",
   ],
 };
 
@@ -210,7 +210,11 @@ export function createPiGeneralTools(ctx: PiGeneralToolsContext): ToolDefinition
     ...openAiSshTools(),
     ...openAiTelegramTools(),
   ];
-  const declarations = SubAgentToolPolicies.isSubAgent(ctx.conversation.id)
+  const isSub =
+    SubAgentToolPolicies.isSubAgent(ctx.conversation.id) ||
+    ctx.conversation.isHeadless === true ||
+    (typeof ctx.conversation.title === "string" && ctx.conversation.title.startsWith("[Sub-agent]"));
+  const declarations = isSub
     ? allDeclarations.filter((d) => SubAgentToolPolicies.permits(ctx.conversation.id, String(d.function.name)))
     : allDeclarations;
   const tools = declarations.map((decl) => {

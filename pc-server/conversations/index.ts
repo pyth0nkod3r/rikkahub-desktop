@@ -74,7 +74,8 @@ export function ensureConversationTables(db: InstanceType<typeof Database>): voi
       workspace_cwd      TEXT,
       engine_compactions TEXT,
       agent_mode         TEXT NOT NULL DEFAULT 'build',
-      chat_model_id      TEXT
+      chat_model_id      TEXT,
+      is_headless        INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS pc_message_node (
       id              TEXT PRIMARY KEY NOT NULL,
@@ -110,6 +111,19 @@ function ensureConversationInjectionColumns(db: InstanceType<typeof Database>): 
 
 /** 工作区篇章(feat/workspace):老库补加会话的工作区归属列。幂等,可空列旧数据天然兼容
  *  (NULL = 对话模式)。仅存 PC 自有库,跨端导出白名单不含这两列(§9.1)。 */
+
+/** 老库补加无头会话列(is_headless,对齐安卓 HeadlessConversations)。幂等。 */
+function ensureConversationHeadlessColumn(db: InstanceType<typeof Database>): void {
+  try {
+    const cols = db.prepare("PRAGMA table_info(pc_conversation)").all() as { name: string }[];
+    if (!cols.some((c) => c.name === "is_headless")) {
+      db.exec("ALTER TABLE pc_conversation ADD COLUMN is_headless INTEGER NOT NULL DEFAULT 0");
+    }
+  } catch (err) {
+    console.warn("[conv-db] 会话 is_headless 列迁移失败", err);
+  }
+}
+
 function ensureConversationWorkspaceColumns(db: InstanceType<typeof Database>): void {
   try {
     const cols = db.prepare("PRAGMA table_info(pc_conversation)").all() as { name: string }[];
@@ -200,6 +214,7 @@ function openConversationsDbUnsafe(): InstanceType<typeof Database> {
     dropTruncateIndexColumnIfPresent(db);
     ensureConversationInjectionColumns(db);
     ensureConversationWorkspaceColumns(db);
+    ensureConversationHeadlessColumn(db);
     ensureConversationEngineCompactionsColumn(db);
     ensureConversationAgentModeColumn(db);
     ensureConversationChatModelColumn(db);
@@ -249,6 +264,7 @@ export function loadConversationMetasFromDb(db: InstanceType<typeof Database>): 
     engineCompactions: safeParseJsonArray(row.engine_compactions),
     agentMode: (row.agent_mode === "plan" ? "plan" : "build") as "build" | "plan",
     chatModelId: row.chat_model_id ?? null,
+    isHeadless: row.is_headless === 1,
   }));
 }
 
@@ -409,11 +425,11 @@ function safeParseStringArray(raw: string): string[] {
 // 该会话全部节点行被级联清空。流式期间每 200ms flush 都 upsert 会话行,等于整个流式期间
 // 磁盘上只剩正在补写的脏节点;流式中途进程死亡 = 会话历史永久丢失。
 const UPSERT_CONVERSATION_SQL =
-  "INSERT INTO pc_conversation (id, assistant_id, title, system_prompt, suggestions, is_pinned, create_at, update_at, mode_injection_ids, lorebook_ids, workspace_id, workspace_cwd, engine_compactions, agent_mode, chat_model_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+  "INSERT INTO pc_conversation (id, assistant_id, title, system_prompt, suggestions, is_pinned, create_at, update_at, mode_injection_ids, lorebook_ids, workspace_id, workspace_cwd, engine_compactions, agent_mode, chat_model_id, is_headless) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
   "ON CONFLICT(id) DO UPDATE SET assistant_id = excluded.assistant_id, title = excluded.title, system_prompt = excluded.system_prompt, " +
   "suggestions = excluded.suggestions, is_pinned = excluded.is_pinned, create_at = excluded.create_at, update_at = excluded.update_at, " +
   "mode_injection_ids = excluded.mode_injection_ids, lorebook_ids = excluded.lorebook_ids, workspace_id = excluded.workspace_id, workspace_cwd = excluded.workspace_cwd, " +
-  "engine_compactions = excluded.engine_compactions, agent_mode = excluded.agent_mode, chat_model_id = excluded.chat_model_id";
+  "engine_compactions = excluded.engine_compactions, agent_mode = excluded.agent_mode, chat_model_id = excluded.chat_model_id, is_headless = excluded.is_headless";
 
 const UPSERT_NODE_SQL =
   "INSERT INTO pc_message_node (id, conversation_id, node_index, messages, select_index) VALUES (?, ?, ?, ?, ?) " +
@@ -437,6 +453,7 @@ export function upsertConversationRowInto(db: InstanceType<typeof Database>, con
     conv.engineCompactions?.length ? JSON.stringify(conv.engineCompactions) : null,
     conv.agentMode || "build",
     conv.chatModelId ?? null,
+    conv.isHeadless ? 1 : 0,
   );
 }
 
@@ -640,6 +657,7 @@ export function migrateConversationsIntoDb(db: InstanceType<typeof Database>, co
         conv.engineCompactions?.length ? JSON.stringify(conv.engineCompactions) : null,
         conv.agentMode || "build",
         conv.chatModelId ?? null,
+        conv.isHeadless ? 1 : 0,
       );
       deleteNodes.run(conv.id);
       deleteConversationFts(db, [conv.id]);

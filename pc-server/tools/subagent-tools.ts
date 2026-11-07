@@ -53,7 +53,7 @@ export function openAiSubAgentTools(profiles: SubAgentProfile[] = listSubAgentPr
   const enabled = SubAgentProfileResolver.enabledProfiles(profiles);
 
   let dispatchDesc = `Dispatch a focused sub-agent — a clean-context LLM run that returns a concise summary.
-Use when the task is independent (research, lookup, multi-step work) and would otherwise pollute your context with intermediate output, or when the user asks for parallel delegation.
+Use when the task is an independent, multi-step workload (e.g. deep research or parallel feature building) that would otherwise pollute your context with intermediate noise, OR when the user explicitly asks for parallel delegation.\nDo NOT use for casual conversation, direct questions, or simple single-file edits — answer those directly inline.
 Pass a clear, self-contained task. For long-running work, set run_in_background=true and poll with subagent_get; otherwise foreground (default) blocks until terminal.`;
 
   if (enabled.length > 0) {

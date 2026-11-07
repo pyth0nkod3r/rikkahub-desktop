@@ -45,6 +45,24 @@ describe("listConversationMetas", () => {
     const c3 = metas.find((m) => m.id === "c3")!;
     expect(c3.chatSuggestions).toEqual([]);
   });
+
+  test("excludes headless conversations from normal listing and pagination", () => {
+    const db = seededDb();
+    db.prepare("INSERT INTO pc_conversation (id, assistant_id, title, system_prompt, suggestions, is_pinned, create_at, update_at, is_headless) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").run(
+      "sub-1", "a1", "Subtask", "", "[]", 0, 4000, 4100, 1
+    );
+    const metas = listConversationMetas(db, "a1");
+    expect(metas.map((m) => m.id)).toEqual(["c3", "c2", "c1"]);
+    expect(metas.some((m) => m.id === "sub-1")).toBe(false);
+
+    const paged = pagedConversationMetas(db, "a1", 0, 10);
+    expect(paged.total).toBe(3);
+    expect(paged.items.some((m) => m.id === "sub-1")).toBe(false);
+
+    const subMeta = getConversationMeta(db, "sub-1");
+    expect(subMeta).not.toBeNull();
+    expect(subMeta?.isHeadless).toBe(true);
+  });
 });
 
 describe("recentConversationMetas", () => {

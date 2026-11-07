@@ -111,6 +111,7 @@ function SubagentHub({
   onClose: (id: string) => void;
   onCloseAll: () => void;
 }) {
+  const navigate = useNavigate();
   const [open, setOpen] = React.useState(false);
   const engineStatus = useConversationStore((s) => s.engineStatus);
 
@@ -291,8 +292,8 @@ export function ConversationTabStrip({
   }, [tabs, titleById]);
 
   const displaySetting = useSettingsStore((state) => state.settings?.displaySetting);
-  const hubThreshold = typeof displaySetting?.subagentHubThreshold === "number" ? displaySetting.subagentHubThreshold : 2;
-  const shouldCollapse = hubThreshold > 0 && subagentTabs.length > hubThreshold;
+  const hubThreshold = typeof displaySetting?.subagentHubThreshold === "number" ? displaySetting.subagentHubThreshold : 0;
+  const shouldCollapse = subagentTabs.length > 0 && (hubThreshold === 0 || subagentTabs.length >= hubThreshold);
 
   const tabsToRender = React.useMemo(() => {
     if (!shouldCollapse) {
