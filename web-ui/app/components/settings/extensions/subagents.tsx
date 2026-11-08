@@ -236,7 +236,6 @@ const AVAILABLE_CAPABILITIES = [
   { id: "schedule", label: "Schedule & Workflows (cron/automation)" },
   { id: "browser", label: "Browser Automation (CDP web driver)" },
   { id: "ssh", label: "SSH Remote Execution" },
-  { id: "subagent", label: "Recursive Sub-Agents" },
   { id: "keystore", label: "Keystore & Cryptography" },
   { id: "web", label: "Web Search & Scraping" },
 ] as const;

@@ -314,11 +314,13 @@ describe("SubAgent Reinjection & Extended Tools", () => {
     expect(names).toContain("subagent_reinject");
   });
 
-  it("subagent capability definition includes subagent_reinject", () => {
-    const policyResult = buildSubAgentToolPolicy([], ["subagent"]);
+  it("subagent capability is disallowed and ignored to block recursive fan-out", () => {
+    const policyResult = buildSubAgentToolPolicy(["subagent_dispatch", "custom_tool"], ["subagent"]);
     expect(policyResult.ok).toBe(true);
     if (!policyResult.ok) return;
-    expect(policyResult.policy.allows("subagent_reinject")).toBe(true);
+    expect(policyResult.policy.allows("subagent_reinject")).toBe(false);
+    expect(policyResult.policy.allows("subagent_dispatch")).toBe(false);
+    expect(policyResult.policy.allows("custom_tool")).toBe(true);
   });
 
   it("SubAgentEngine.reinject validates input and returns error for non-existent run", async () => {

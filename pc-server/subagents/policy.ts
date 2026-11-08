@@ -51,10 +51,6 @@ export const SUBAGENT_CAPABILITIES: Record<string, CapabilityDef> = {
       "ssh_download",
     ],
   },
-  subagent: {
-    wire: "subagent",
-    toolNames: ["subagent_dispatch", "subagent_list", "subagent_get", "subagent_cancel", "subagent_reinject"],
-  },
   keystore: {
     wire: "keystore",
     toolNames: [
@@ -109,7 +105,7 @@ export function buildSubAgentToolPolicy(
 ): SubAgentPolicyBuildResult {
   const requestedCaps = Array.from(capabilities)
     .map((c) => c.trim().toLowerCase())
-    .filter(Boolean);
+    .filter((c) => Boolean(c) && c !== "subagent");
 
   const unknown = requestedCaps.filter((cap) => !SUBAGENT_CAPABILITIES[cap]);
   if (unknown.length > 0) {
@@ -119,7 +115,7 @@ export function buildSubAgentToolPolicy(
   const names = new Set<string>();
   for (const t of roleTools) {
     const trimmed = t.trim();
-    if (trimmed) names.add(trimmed);
+    if (trimmed && !trimmed.startsWith("subagent_")) names.add(trimmed);
   }
 
   for (const cap of requestedCaps) {
