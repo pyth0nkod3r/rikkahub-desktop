@@ -319,6 +319,19 @@ export class SubAgentEngine {
     }
   }
 
+  isSubAgentConversation(conversationId: string | null | undefined): boolean {
+    if (!conversationId) return false;
+    if (SubAgentToolPolicies.isSubAgent(conversationId)) return true;
+    if (this.registry.list().some((r) => r.subConversationId === conversationId)) return true;
+    try {
+      const conv = getConversation(conversationId);
+      if (conv?.isHeadless === true) return true;
+    } catch {
+      // Fallback
+    }
+    return false;
+  }
+
   private getAssistantCap(assistantId: string): number {
     try {
       const assistant = findAssistant(assistantId);

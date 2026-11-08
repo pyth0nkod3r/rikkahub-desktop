@@ -337,4 +337,74 @@ describe("SubAgent Reinjection & Extended Tools", () => {
       expect(notFoundRes.error).toBe("not_found");
     }
   });
+
+  it("SubAgentEngine.isSubAgentConversation detects subagent conversations and protects against recursion", async () => {
+    const registry = new SubAgentRegistry();
+    const engine = new SubAgentEngine(registry);
+
+    // Null, undefined, empty, or normal conversations return false
+    expect(engine.isSubAgentConversation(null)).toBe(false);
+    expect(engine.isSubAgentConversation(undefined)).toBe(false);
+    expect(engine.isSubAgentConversation("")).toBe(false);
+    expect(engine.isSubAgentConversation("normal-chat-123")).toBe(false);
+
+    // Returns true when registered in SubAgentToolPolicies
+    const policyResult = buildSubAgentToolPolicy([], ["workspace"]);
+    if (policyResult.ok) {
+      SubAgentToolPolicies.register("policy-sub-conv", policyResult.policy);
+      expect(engine.isSubAgentConversation("policy-sub-conv")).toBe(true);
+      SubAgentToolPolicies.unregister("policy-sub-conv");
+      expect(engine.isSubAgentConversation("policy-sub-conv")).toBe(false);
+    }
+
+    // Returns true when present in registry as subConversationId
+    registry.addPending(
+      {
+        id: "run-test-sub",
+        parentChatId: "parent-chat-1",
+        parentAssistantId: "asst-1",
+        subConversationId: "sub-conv-registry-id",
+        label: "test",
+        task: "test task",
+        modelId: null,
+        agentName: null,
+        tools: null,
+        capabilities: null,
+        runInBackground: true,
+        noResult: false,
+        timeoutSeconds: 60,
+        maxTrips: 5,
+        isolateWorktree: false,
+        worktreeDiff: null,
+        status: "running",
+        result: null,
+        error: null,
+        startedAtMs: Date.now(),
+        finishedAtMs: null,
+        tokensIn: 0,
+        tokensOut: 0,
+        tripCount: 0,
+      },
+      new AbortController(),
+    );
+    expect(engine.isSubAgentConversation("sub-conv-registry-id")).toBe(true);
+
+    // Dispatch from a subagent conversation rejects with no_recursion
+    const recurseRes = await engine.dispatch("asst-1", "sub-conv-registry-id", {
+      task: "nested dispatch task",
+    });
+    expect(recurseRes.ok).toBe(false);
+    if (!recurseRes.ok) {
+      expect(recurseRes.error).toBe("no_recursion");
+    }
+
+    // Dispatch from a regular chat conversation does NOT throw 'isSubAgentConversation is not a function'
+    const regularDispatchRes = await engine.dispatch("asst-1", "normal-chat-123", {
+      task: "   ", // Invalid task triggers validation failure cleanly without throwing TypeError
+    });
+    expect(regularDispatchRes.ok).toBe(false);
+    if (!regularDispatchRes.ok) {
+      expect(regularDispatchRes.error).toBe("invalid_task");
+    }
+  });
 });
