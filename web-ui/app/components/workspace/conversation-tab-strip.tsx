@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Bot, ChevronDown, Pencil, Plus, X } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "~/components/ui/popover";
 import { toast } from "sonner";
+import api from "~/services/api";
 
 import { Button } from "~/components/ui/button";
 import {
@@ -271,11 +272,34 @@ export function ConversationTabStrip({
   const [renameValue, setRenameValue] = React.useState("");
   const [renameSaving, setRenameSaving] = React.useState(false);
 
+  const entries = useConversationStore((state) => state.entries);
+
   const titleById = React.useMemo(() => {
     const map = new Map<string, string>();
     for (const item of conversations) map.set(item.id, item.title);
+    for (const [id, entry] of Object.entries(entries)) {
+      if (entry?.detail?.title && !map.has(id)) {
+        map.set(id, entry.detail.title);
+      }
+    }
     return map;
-  }, [conversations]);
+  }, [conversations, entries]);
+
+  React.useEffect(() => {
+    const missing = tabs.filter((id) => !titleById.has(id));
+    if (missing.length === 0) return;
+    for (const id of missing) {
+      api.get<{ title?: string }>(`conversations/${id}`)
+        .then((data) => {
+          if (data?.title) {
+            useConversationStore.getState().setEntry(id, {
+              detail: { id, title: data.title } as any,
+            });
+          }
+        })
+        .catch(() => {});
+    }
+  }, [tabs, titleById]);
 
   const { regularTabs, subagentTabs } = React.useMemo(() => {
     const reg: string[] = [];
@@ -292,8 +316,8 @@ export function ConversationTabStrip({
   }, [tabs, titleById]);
 
   const displaySetting = useSettingsStore((state) => state.settings?.displaySetting);
-  const hubThreshold = typeof displaySetting?.subagentHubThreshold === "number" ? displaySetting.subagentHubThreshold : 0;
-  const shouldCollapse = subagentTabs.length > 0 && (hubThreshold === 0 || subagentTabs.length >= hubThreshold);
+  const hubThreshold = typeof displaySetting?.subagentHubThreshold === "number" ? displaySetting.subagentHubThreshold : 2;
+  const shouldCollapse = hubThreshold > 0 && subagentTabs.length >= hubThreshold;
 
   const tabsToRender = React.useMemo(() => {
     if (!shouldCollapse) {

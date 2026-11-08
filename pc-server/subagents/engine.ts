@@ -326,6 +326,7 @@ export class SubAgentEngine {
     try {
       const conv = getConversation(conversationId);
       if (conv?.isHeadless === true) return true;
+      if (typeof conv?.title === "string" && conv.title.startsWith("[Sub-agent]")) return true;
     } catch {
       // Fallback
     }
@@ -457,7 +458,7 @@ export class SubAgentEngine {
       workspaceId,
       workspaceCwd,
       agentMode: "build",
-      isHeadless: true,
+      isHeadless: false,
     };
 
     // Prepare task prompt with wrap-up instruction

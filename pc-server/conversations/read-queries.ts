@@ -78,7 +78,7 @@ const META_COLUMNS = "id, assistant_id, title, system_prompt, suggestions, is_pi
  */
 export function listConversationMetas(db: Database, assistantId: string): ConversationMeta[] {
   const rows = db.prepare(
-    `SELECT ${META_COLUMNS} FROM pc_conversation WHERE assistant_id = ? AND (is_headless = 0 OR is_headless IS NULL) ORDER BY create_at DESC, id DESC`,
+    `SELECT ${META_COLUMNS} FROM pc_conversation WHERE assistant_id = ? ORDER BY create_at DESC, id DESC`,
   ).all(assistantId) as MetaRow[];
   return rows.map(rowToMeta);
 }
@@ -102,7 +102,7 @@ export function listAllConversationMetas(db: Database): ConversationMeta[] {
 /** 某助手最近会话元数据（buildRecentChatsPrompt 用）：updateAt 倒序，并列时保持 createAt 倒序稳定性。 */
 export function recentConversationMetas(db: Database, assistantId: string, excludeId: string | undefined, limit: number): ConversationMeta[] {
   const rows = db.prepare(
-    `SELECT ${META_COLUMNS} FROM pc_conversation WHERE assistant_id = ? AND id != ? AND (is_headless = 0 OR is_headless IS NULL) ORDER BY update_at DESC, create_at DESC, id DESC LIMIT ?`,
+    `SELECT ${META_COLUMNS} FROM pc_conversation WHERE assistant_id = ? AND id != ? ORDER BY update_at DESC, create_at DESC, id DESC LIMIT ?`,
   ).all(assistantId, excludeId ?? "", limit) as MetaRow[];
   return rows.map(rowToMeta);
 }
@@ -118,9 +118,9 @@ const LIST_ORDER = "ORDER BY is_pinned DESC, update_at DESC, create_at DESC, id 
  */
 export function pagedConversationMetas(db: Database, assistantId: string, offset: number, limit: number): { items: ConversationMeta[]; total: number } {
   const rows = db.prepare(
-    `SELECT ${META_COLUMNS} FROM pc_conversation WHERE assistant_id = ? AND (is_headless = 0 OR is_headless IS NULL) ${LIST_ORDER} LIMIT ? OFFSET ?`,
+    `SELECT ${META_COLUMNS} FROM pc_conversation WHERE assistant_id = ? ${LIST_ORDER} LIMIT ? OFFSET ?`,
   ).all(assistantId, limit, offset) as MetaRow[];
-  const total = (db.prepare("SELECT COUNT(*) AS n FROM pc_conversation WHERE assistant_id = ? AND (is_headless = 0 OR is_headless IS NULL)").get(assistantId) as { n: number }).n;
+  const total = (db.prepare("SELECT COUNT(*) AS n FROM pc_conversation WHERE assistant_id = ?").get(assistantId) as { n: number }).n;
   return { items: rows.map(rowToMeta), total };
 }
 
