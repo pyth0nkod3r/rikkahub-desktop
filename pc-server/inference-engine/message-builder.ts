@@ -88,11 +88,18 @@ export function contentPartsForApi(parts: MessagePart[], targetModel?: Model) {
       const ocrText = String(metadata.ocrText ?? "").trim();
       // Android OcrTransformer: when chat model has no IMAGE input, replace image with OCR text.
       // Otherwise (model supports image), keep the image and append OCR text alongside as extra hint.
-      if (stripImageForOcr && ocrText) {
-        result.push({
-          type: "text",
-          text: `<image_file_ocr>\n${ocrText}\n</image_file_ocr>`,
-        });
+      if (stripImageForOcr) {
+        if (ocrText) {
+          result.push({
+            type: "text",
+            text: `<image_file_ocr>\n${ocrText}\n</image_file_ocr>`,
+          });
+        } else {
+          result.push({
+            type: "text",
+            text: "[Image]",
+          });
+        }
         continue;
       }
       const url = dataUrlForMessageUrl(String(part.url ?? ""));
@@ -841,8 +848,11 @@ export function responseApiTextPart(text: string, role: string) {
 export function responseApiImagePart(part: Record<string, JsonValue>, role: string, stripForOcr = false) {
   const metadata = isRecord(part.metadata) ? part.metadata : {};
   const ocrText = String(metadata.ocrText ?? "").trim();
-  if (stripForOcr && ocrText) {
-    return responseApiTextPart(`<image_file_ocr>\n${ocrText}\n</image_file_ocr>`, role);
+  if (stripForOcr) {
+    if (ocrText) {
+      return responseApiTextPart(`<image_file_ocr>\n${ocrText}\n</image_file_ocr>`, role);
+    }
+    return responseApiTextPart("[Image]", role);
   }
   const url = dataUrlForMessageUrl(String(part.url ?? ""));
   if (!url) return null;

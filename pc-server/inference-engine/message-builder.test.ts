@@ -70,6 +70,14 @@ describe("apiContentFromParts", () => {
     expect(kept.map((p) => p.type)).toEqual(["image_url", "text"]);
   });
 
+  test("模型不支持 IMAGE 且 OCR 文本为空时，降级为 [Image] 占位符而非发送 image_url（Android OcrTransformer 对齐）", () => {
+    const parts: MessagePart[] = [
+      { type: "image", url: "data:image/png;base64,AA", metadata: { ocrStatus: "failed" } },
+    ];
+    const stripped = apiContentFromParts(parts, "", textModel);
+    expect(stripped).toBe("[Image]");
+  });
+
   test("audio/video 降级为文本占位", () => {
     expect(apiContentFromParts([{ type: "audio", url: "u" }])).toBe("[audio: u]");
   });

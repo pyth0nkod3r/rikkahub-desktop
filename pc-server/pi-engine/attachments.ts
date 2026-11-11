@@ -11,7 +11,7 @@
 // 附件作为独立 content block 的行为等价,模型侧无感。
 
 import type { MessagePart, Model } from "../foundation/types";
-import { contentPartsForApi, parseDataUrl } from "../inference-engine/message-builder";
+import { contentPartsForApi, parseDataUrl, supportsInputModality } from "../inference-engine/message-builder";
 
 export interface PiPromptInput {
   text: string;
@@ -30,6 +30,10 @@ export function piPromptInputFromParts(parts: MessagePart[], model: Model): PiPr
       continue;
     }
     if (entry?.type === "image_url") {
+      if (!supportsInputModality(model, "IMAGE")) {
+        texts.push("[Image]");
+        continue;
+      }
       const url = String(entry.image_url?.url ?? "");
       const parsed = parseDataUrl(url);
       // 非 data URL(远程 http 图等):pi 进程无由代取,降级占位文本——与聊天引擎
