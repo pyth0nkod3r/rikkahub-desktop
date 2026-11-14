@@ -7,9 +7,12 @@ import {
   Cpu,
   FileDiff,
   FolderGit2,
+  History,
   PanelRightClose,
   RefreshCw,
+  RotateCcw,
   Sparkles,
+  Terminal,
   Trash2,
   X,
 } from "lucide-react";
@@ -89,6 +92,46 @@ export function SidecarPanel({
       });
     });
     toast.success("Subagent tabs cleared from top bar");
+  };
+
+  // Recorded Workspace Diffs Ledger
+  const [recordedDiffs, setRecordedDiffs] = React.useState<Array<{
+    id: string;
+    relPath: string;
+    unifiedDiff: string;
+    reverted: boolean;
+    createdAt: number;
+  }>>([]);
+  const [revertingId, setRevertingId] = React.useState<string | null>(null);
+
+  const loadRecordedDiffs = React.useCallback(async () => {
+    if (!activeWorkspaceId) return;
+    try {
+      const res = await api.get<{ diffs: any[] }>(`workspaces/${activeWorkspaceId}/diffs?limit=30`);
+      setRecordedDiffs(res.diffs ?? []);
+    } catch {
+      // ignore
+    }
+  }, [activeWorkspaceId]);
+
+  React.useEffect(() => {
+    if (sidecarTab === "diff" && activeWorkspaceId) {
+      void loadRecordedDiffs();
+    }
+  }, [sidecarTab, activeWorkspaceId, loadRecordedDiffs]);
+
+  const handleRevertDiff = async (diffId: string) => {
+    if (!activeWorkspaceId) return;
+    setRevertingId(diffId);
+    try {
+      await api.post(`workspaces/${activeWorkspaceId}/diffs/${diffId}/revert`, {});
+      toast.success("File reverted successfully");
+      void loadRecordedDiffs();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Revert failed");
+    } finally {
+      setRevertingId(null);
+    }
   };
 
   // Active conversation stats for Tokens & Context tab
@@ -196,7 +239,7 @@ export function SidecarPanel({
             <span>Context</span>
           </button>
 
-          {activeDiff && (
+          {(activeDiff || activeWorkspaceId) && (
             <button
               type="button"
               onClick={() => setSidecarTab("diff")}
@@ -213,14 +256,24 @@ export function SidecarPanel({
           )}
         </div>
 
-        <button
-          type="button"
-          onClick={() => setSidecarOpen(false)}
-          className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-          title="Close inspector (collapse sidecar)"
-        >
-          <PanelRightClose className="size-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => useWorkspaceLayoutStore.getState().openTerminalModal(activeWorkspaceId || "default")}
+            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+            title="Open workspace terminal"
+          >
+            <Terminal className="size-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setSidecarOpen(false)}
+            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+            title="Close inspector (collapse sidecar)"
+          >
+            <PanelRightClose className="size-4" />
+          </button>
+        </div>
       </div>
 
       {/* Sidecar Content Area */}
@@ -407,22 +460,91 @@ export function SidecarPanel({
           </div>
         )}
 
-        {sidecarTab === "diff" && activeDiff && (
-          <div className="h-full flex flex-col">
-            <div className="flex items-center justify-between border-b border-border/80 px-3 py-2 bg-muted/30">
-              <span className="font-mono text-xs truncate max-w-[200px]" title={activeDiff.file}>
-                {activeDiff.file}
-              </span>
-              <button
-                type="button"
-                onClick={closeDiff}
-                className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-              >
-                <X className="size-3.5" />
-              </button>
-            </div>
-            <div className="flex-1 min-h-0 overflow-auto">
-              <DiffView diff={activeDiff.diff} />
+        {sidecarTab === "diff" && (
+          <div className="h-full flex flex-col min-h-0 overflow-hidden">
+            {activeDiff && (
+              <div className="flex flex-col border-b border-border/80">
+                <div className="flex items-center justify-between px-3 py-2 bg-muted/30">
+                  <span className="font-mono text-xs truncate max-w-[200px]" title={activeDiff.file}>
+                    {activeDiff.file}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={closeDiff}
+                    className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                    title="Close active diff"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                </div>
+                <div className="max-h-64 overflow-auto">
+                  <DiffView diff={activeDiff.diff} />
+                </div>
+              </div>
+            )}
+
+            {/* Recorded Workspace Diffs Ledger */}
+            <div className="flex-1 flex flex-col min-h-0">
+              <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/20">
+                <div className="flex items-center gap-1.5 text-xs font-medium">
+                  <History className="size-3.5 text-muted-foreground" />
+                  <span>Workspace Change History</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void loadRecordedDiffs()}
+                  className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                  title="Refresh diffs"
+                >
+                  <RefreshCw className="size-3" />
+                </button>
+              </div>
+
+              <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-2">
+                {recordedDiffs.map((d) => (
+                  <div
+                    key={d.id}
+                    className="rounded-lg border bg-background/50 p-2.5 space-y-1.5 text-xs"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-mono truncate text-[11px] font-medium" title={d.relPath}>
+                        {d.relPath}
+                      </span>
+                      {d.reverted ? (
+                        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                          Reverted
+                        </span>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={revertingId === d.id}
+                          onClick={() => void handleRevertDiff(d.id)}
+                          className="h-6 px-2 text-[10px] gap-1 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+                        >
+                          {revertingId === d.id ? (
+                            <RefreshCw className="size-2.5 animate-spin" />
+                          ) : (
+                            <RotateCcw className="size-2.5" />
+                          )}
+                          Revert
+                        </Button>
+                      )}
+                    </div>
+                    {d.unifiedDiff && (
+                      <pre className="max-h-24 overflow-x-auto rounded bg-muted/40 p-1.5 font-mono text-[10px] leading-tight text-muted-foreground">
+                        {d.unifiedDiff.slice(0, 300)}
+                      </pre>
+                    )}
+                  </div>
+                ))}
+                {recordedDiffs.length === 0 && (
+                  <div className="py-8 text-center text-xs text-muted-foreground">
+                    No recorded file changes in this workspace yet.
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}

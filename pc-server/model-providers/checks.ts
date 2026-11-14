@@ -80,7 +80,7 @@ async function headersForProvider(providerItem: Provider, modelItem?: Model): Pr
   const headers: Record<string, string> = { ...resolved.headers };
   const modelHeaders = modelCustomHeaderRecords(modelItem);
   const providerHeaders = providerCustomHeaderRecords(providerItem);
-  const targetHeaders = modelHeaders.length > 0 ? modelHeaders : providerHeaders;
+  const targetHeaders = [...providerHeaders, ...modelHeaders];
   for (const header of targetHeaders) {
     const name = String(header.name ?? header.key ?? "").trim();
     if (name) setHeaderCaseInsensitive(headers, name, String(header.value ?? ""));

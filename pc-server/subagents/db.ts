@@ -68,6 +68,13 @@ function db(): Database | null {
     try { handle.exec("ALTER TABLE pc_subagent_run ADD COLUMN resumed_after_ms INTEGER"); } catch {}
     try { handle.exec("ALTER TABLE pc_subagent_run ADD COLUMN attempted_model TEXT"); } catch {}
     try { handle.exec("ALTER TABLE pc_subagent_run ADD COLUMN fallback_reason TEXT"); } catch {}
+    try { handle.exec("ALTER TABLE pc_subagent_profile ADD COLUMN provider_id TEXT"); } catch {}
+    try { handle.exec("ALTER TABLE pc_subagent_profile ADD COLUMN secondary_model_id TEXT"); } catch {}
+    try { handle.exec("ALTER TABLE pc_subagent_profile ADD COLUMN secondary_model_slug TEXT"); } catch {}
+    try { handle.exec("ALTER TABLE pc_subagent_profile ADD COLUMN secondary_provider_id TEXT"); } catch {}
+    try { handle.exec("ALTER TABLE pc_subagent_profile ADD COLUMN max_fails_before_switch INTEGER NOT NULL DEFAULT 1"); } catch {}
+    try { handle.exec("ALTER TABLE pc_subagent_run ADD COLUMN verification_verdict TEXT"); } catch {}
+    try { handle.exec("ALTER TABLE pc_subagent_run ADD COLUMN verification_summary TEXT"); } catch {}
 
     ensuredDbs.add(handle);
   }
@@ -122,6 +129,12 @@ function parseJsonArray(raw: string | null | undefined): string[] {
   }
 }
 
+function clampMaxFails(raw: unknown): number {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return 1;
+  return Math.max(1, Math.min(10, Math.trunc(n)));
+}
+
 function rowToProfile(row: ProfileRow): SubAgentProfile {
   return {
     id: row.id,
@@ -130,6 +143,11 @@ function rowToProfile(row: ProfileRow): SubAgentProfile {
     systemPrompt: row.system_prompt,
     modelId: row.model_id,
     modelSlug: (row as any).model_slug ?? null,
+    providerId: (row as any).provider_id ?? null,
+    secondaryModelId: (row as any).secondary_model_id ?? null,
+    secondaryModelSlug: (row as any).secondary_model_slug ?? null,
+    secondaryProviderId: (row as any).secondary_provider_id ?? null,
+    maxFailsBeforeSwitch: clampMaxFails((row as any).max_fails_before_switch),
     enabled: Boolean(row.enabled),
     tools: parseJsonArray(row.tools),
     capabilities: parseJsonArray(row.capabilities),
@@ -171,6 +189,8 @@ function rowToRun(row: RunRow): SubAgentRun {
     resumedAfterMs: (row as any).resumed_after_ms ?? null,
     attemptedModel: (row as any).attempted_model ?? null,
     fallbackReason: (row as any).fallback_reason ?? null,
+    verificationVerdict: (row as any).verification_verdict ?? undefined,
+    verificationSummary: (row as any).verification_summary ?? null,
   };
 }
 
@@ -200,13 +220,21 @@ export function upsertSubAgentProfile(profile: SubAgentProfile): void {
   handle
     .prepare(
       `INSERT INTO pc_subagent_profile (
-        id, name, description, system_prompt, model_id, enabled, tools, capabilities, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, name, description, system_prompt, model_id, model_slug, provider_id,
+        secondary_model_id, secondary_model_slug, secondary_provider_id, max_fails_before_switch,
+        enabled, tools, capabilities, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         name = excluded.name,
         description = excluded.description,
         system_prompt = excluded.system_prompt,
         model_id = excluded.model_id,
+        model_slug = excluded.model_slug,
+        provider_id = excluded.provider_id,
+        secondary_model_id = excluded.secondary_model_id,
+        secondary_model_slug = excluded.secondary_model_slug,
+        secondary_provider_id = excluded.secondary_provider_id,
+        max_fails_before_switch = excluded.max_fails_before_switch,
         enabled = excluded.enabled,
         tools = excluded.tools,
         capabilities = excluded.capabilities,
@@ -218,6 +246,12 @@ export function upsertSubAgentProfile(profile: SubAgentProfile): void {
       profile.description ?? "",
       profile.systemPrompt ?? "",
       profile.modelId ?? null,
+      profile.modelSlug ?? null,
+      profile.providerId ?? null,
+      profile.secondaryModelId ?? null,
+      profile.secondaryModelSlug ?? null,
+      profile.secondaryProviderId ?? null,
+      clampMaxFails(profile.maxFailsBeforeSwitch),
       profile.enabled ? 1 : 0,
       JSON.stringify(profile.tools ?? []),
       JSON.stringify(profile.capabilities ?? []),
@@ -242,11 +276,12 @@ export function insertSubAgentRun(run: SubAgentRun): void {
     .prepare(
       `INSERT INTO pc_subagent_run (
         id, parent_conversation_id, parent_assistant_id, sub_conversation_id,
-        label, task, model_id, agent_name, tools, capabilities,
+        label, task, model_id, resolved_model_id, resolved_model_slug, agent_name, tools, capabilities,
         run_in_background, no_result, timeout_seconds, max_trips,
         status, result, error, started_at_ms, finished_at_ms,
-        tokens_in, tokens_out, trip_count
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        tokens_in, tokens_out, trip_count, attempted_model, fallback_reason,
+        verification_verdict, verification_summary
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       run.id,
@@ -256,6 +291,8 @@ export function insertSubAgentRun(run: SubAgentRun): void {
       run.label,
       run.task,
       run.modelId,
+      run.resolvedModelId ?? run.modelId ?? null,
+      run.resolvedModelSlug ?? null,
       run.agentName,
       run.tools ? JSON.stringify(run.tools) : null,
       run.capabilities ? JSON.stringify(run.capabilities) : null,
@@ -271,6 +308,10 @@ export function insertSubAgentRun(run: SubAgentRun): void {
       run.tokensIn,
       run.tokensOut,
       run.tripCount,
+      run.attemptedModel ?? null,
+      run.fallbackReason ?? null,
+      run.verificationVerdict ?? null,
+      run.verificationSummary ?? null,
     );
 }
 
@@ -290,7 +331,12 @@ export function updateSubAgentRun(run: SubAgentRun): void {
         trip_count = ?,
         model_id = ?,
         resolved_model_id = ?,
-        agent_name = ?
+        resolved_model_slug = ?,
+        agent_name = ?,
+        attempted_model = ?,
+        fallback_reason = ?,
+        verification_verdict = ?,
+        verification_summary = ?
       WHERE id = ?`,
     )
     .run(
@@ -303,8 +349,13 @@ export function updateSubAgentRun(run: SubAgentRun): void {
       run.tokensOut,
       run.tripCount,
       run.modelId ?? null,
-      (run as any).resolvedModelId ?? run.modelId ?? null,
+      run.resolvedModelId ?? run.modelId ?? null,
+      run.resolvedModelSlug ?? null,
       run.agentName ?? null,
+      run.attemptedModel ?? null,
+      run.fallbackReason ?? null,
+      run.verificationVerdict ?? null,
+      run.verificationSummary ?? null,
       run.id,
     );
 }

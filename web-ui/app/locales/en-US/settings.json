@@ -1327,6 +1327,8 @@
     "name_label": "Profile Name",
     "desc_label": "Description",
     "model_label": "Assigned Model",
+    "secondary_model_label": "Secondary Fallback Model",
+    "max_fails_label": "Fail Threshold Before Switch",
     "inherit_model": "Inherit from parent assistant",
     "enabled_label": "Enabled",
     "system_prompt_label": "Custom System Prompt",

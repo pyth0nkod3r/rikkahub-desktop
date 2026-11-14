@@ -1,3 +1,5 @@
+import { selectSkillsForTurn } from "../tools/skill-selector";
+import { listSkills } from "../tools/skills";
 import { PLAN_MODE_SYSTEM_PROMPT } from "../agents/agent-mode";
 // pi-engine/resources.ts — pi 会话资源装配(P4,方案 §三/§4.2 的落点)
 //
@@ -210,6 +212,17 @@ export async function createPiSessionResources(options: {
     { projectTrusted: false },
   );
   const enabledSkills = new Set(getStringArray(assistant.enabledSkills));
+  const latestUserNode = [...conversation.messages].reverse().find((n) => (n.messages[n.selectIndex] ?? n.messages[0])?.role === "USER");
+  const latestPrompt = latestUserNode ? (latestUserNode.messages[latestUserNode.selectIndex] ?? latestUserNode.messages[0])?.parts?.map((p: any) => p?.text || "").join(" ") : "";
+  const autoSkills = selectSkillsForTurn({
+    skills: listSkills(),
+    userPrompt: latestPrompt,
+    enabledNames: enabledSkills,
+    maxAutoRelevant: 3,
+  });
+  for (const entry of autoSkills) {
+    enabledSkills.add(entry.skill.name);
+  }
   // 技能库目录是我们的家,确保存在(与 tools/skills.listSkills 同款自愈)——否则冷启动
   // 未开过技能页时,pi 每轮 reload 都会对 additionalSkillPaths 报"path does not exist"。
   mkdirSync(skillsDir, { recursive: true });

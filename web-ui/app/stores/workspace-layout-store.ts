@@ -21,6 +21,9 @@ interface WorkspaceLayoutState {
   setSidecarTab: (tab: SidecarTab) => void;
   openDiff: (diff: ActiveDiffItem) => void;
   closeDiff: () => void;
+  terminalModalWorkspaceId: string | null;
+  openTerminalModal: (workspaceId: string) => void;
+  closeTerminalModal: () => void;
 }
 
 const STORAGE_WIDTH_KEY = "rikkahub.chat_width_mode";
@@ -57,6 +60,7 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutState>((set, get) =
   sidecarOpen: getInitialSidecarOpen(),
   sidecarTab: getInitialTab(),
   activeDiff: null,
+  terminalModalWorkspaceId: null,
 
   setWidthMode: (mode) => {
     localStorage.setItem(STORAGE_WIDTH_KEY, mode);
@@ -99,6 +103,8 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutState>((set, get) =
   closeDiff: () => {
     set({ activeDiff: null, sidecarTab: "files" });
   },
+  openTerminalModal: (workspaceId) => set({ terminalModalWorkspaceId: workspaceId }),
+  closeTerminalModal: () => set({ terminalModalWorkspaceId: null }),
 }));
 
 export function getChatWidthClass(widthMode: ChatWidthMode): string {

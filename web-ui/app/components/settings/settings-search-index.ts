@@ -243,6 +243,8 @@ const ROW_ENTRIES: readonly SettingsSearchEntry[] = [
   row("extensions/subagents", "subagents.name_label"),
   row("extensions/subagents", "subagents.desc_label"),
   row("extensions/subagents", "subagents.model_label"),
+  row("extensions/subagents", "subagents.secondary_model_label"),
+  row("extensions/subagents", "subagents.max_fails_label"),
   row("extensions/subagents", "subagents.enabled_label"),
   row("extensions/subagents", "subagents.system_prompt_label"),
   row("extensions/subagents", "subagents.capabilities_title"),

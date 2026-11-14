@@ -289,6 +289,16 @@ export function trustWorkspace(workspaceId: string): Workspace | null {
   return getWorkspace(workspaceId);
 }
 
+/** Find the most recent ready managed workspace (used when launching terminal from plain Chat mode), or create one. */
+export function ensureDefaultChatWorkspace(): Workspace {
+  const existing = listWorkspaces().find((ws) => ws.type === "managed" && workspaceStatus(ws) === "ready");
+  if (existing) {
+    touchWorkspaceAccess(existing.id);
+    return getWorkspace(existing.id) ?? existing;
+  }
+  return createWorkspace({ type: "managed", name: "Default Terminal" });
+}
+
 export function touchWorkspaceAccess(workspaceId: string): void {
   db().prepare("UPDATE pc_workspace SET last_access_at = ? WHERE id = ?").run(Date.now(), workspaceId);
 }

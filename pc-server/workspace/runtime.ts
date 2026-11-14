@@ -13,6 +13,7 @@ import { isToolAllowedInPlanMode } from "../agents/agent-mode";
 import { existsSync, mkdirSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 import type { Conversation, JsonValue, TextPart, ToolOutputEntry, Workspace } from "../foundation/types";
+import { capturePreWriteSnapshot, recordWorkspaceFileDiff } from "./diffs";
 import { getConversation } from "../conversations";
 import { addLog } from "../api/logs";
 import { state } from "../persistence/json-store";
@@ -383,7 +384,36 @@ export async function executeWorkspaceToolCore(
         input = { command: String(args.command), timeout: clampBashTimeoutSeconds(optionalNumberArg(args, "timeout")) } satisfies BashToolInput;
         break;
     }
+    let preWrite: { absPath: string; existedBefore: boolean; beforeContent: string | null } | null = null;
+    if (name === "write" || name === "edit") {
+      const rel = typeof args.path === "string" ? args.path : "";
+      if (rel) {
+        try {
+          const abs = isAbsolute(rel) ? rel : resolve(runtime.cwd, rel);
+          const snap = capturePreWriteSnapshot(abs);
+          preWrite = { absPath: abs, ...snap };
+        } catch {
+          // ignore
+        }
+      }
+    }
     const result = await tool.execute(input, context?.signal, context?.onUpdate);
+    if (preWrite) {
+      try {
+        const patch = (result.details as any)?.patch ?? (result.details as any)?.diff;
+        recordWorkspaceFileDiff({
+          workspaceId: runtime.workspace.id,
+          workspaceRoot: runtime.root,
+          conversationId: context?.conversationId,
+          absPath: preWrite.absPath,
+          existedBefore: preWrite.existedBefore,
+          beforeContent: preWrite.beforeContent,
+          unifiedDiff: typeof patch === "string" ? patch : undefined,
+        });
+      } catch {
+        // ignore diff record errors
+      }
+    }
     const summary = result.content
       .map((entry) => (entry.type === "text" ? entry.text : ""))
       .join("\n");

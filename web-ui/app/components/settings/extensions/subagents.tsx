@@ -3,10 +3,12 @@ function SubAgentModelPicker({
   value,
   onChange,
   providers,
+  placeholder = "Inherit from parent assistant",
 }: {
   value: string | null;
   onChange: (modelId: string | null) => void;
   providers: any[];
+  placeholder?: string;
 }) {
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState("");
@@ -74,7 +76,7 @@ function SubAgentModelPicker({
                 <span className="text-muted-foreground text-micro">({selectedModel.providerName})</span>
               </>
             ) : (
-              <span className="text-muted-foreground">Inherit from parent assistant</span>
+              <span className="text-muted-foreground">{placeholder}</span>
             )}
           </div>
           <ChevronDown className="size-4 shrink-0 opacity-50" />
@@ -204,6 +206,12 @@ export interface SubAgentProfileDto {
   description: string;
   systemPrompt: string;
   modelId: string | null;
+  modelSlug?: string | null;
+  providerId?: string | null;
+  secondaryModelId?: string | null;
+  secondaryModelSlug?: string | null;
+  secondaryProviderId?: string | null;
+  maxFailsBeforeSwitch?: number;
   enabled: boolean;
   tools: string[];
   capabilities: string[];
@@ -229,6 +237,9 @@ export interface SubAgentRunDto {
   startedAtMs: number;
   finishedAtMs: number | null;
   tripCount: number;
+  fallbackReason?: string | null;
+  verificationVerdict?: "confirmed" | "contradicted" | "unconfirmed" | "unsuccessful" | "open";
+  verificationSummary?: string | null;
 }
 
 const AVAILABLE_CAPABILITIES = [
@@ -509,6 +520,44 @@ export function SubAgentsSection({ settings }: { settings: Settings; onSettings:
                     value={draft.modelId}
                     onChange={(val) => setDraft({ ...draft, modelId: val })}
                     providers={settings.providers ?? []}
+                  />
+                </SettingsField>
+
+                <SettingsField
+                  label={t("settings:subagents.secondary_model_label", "Secondary Fallback Model")}
+                  description={t(
+                    "settings:subagents.secondary_model_desc",
+                    "Used automatically if the primary model fails or its provider is unavailable.",
+                  )}
+                >
+                  <SubAgentModelPicker
+                    value={draft.secondaryModelId ?? null}
+                    onChange={(val) => setDraft({ ...draft, secondaryModelId: val })}
+                    providers={settings.providers ?? []}
+                    placeholder="None (use global fast/chat model)"
+                  />
+                </SettingsField>
+
+                <SettingsField
+                  label={t("settings:subagents.max_fails_label", "Fail Threshold Before Switch")}
+                  description={t(
+                    "settings:subagents.max_fails_desc",
+                    "Consecutive primary-model failures before switching to fallback (1–10, default 1).",
+                  )}
+                >
+                  <Input
+                    type="number"
+                    min={1}
+                    max={10}
+                    className="w-28"
+                    value={draft.maxFailsBeforeSwitch ?? 1}
+                    onChange={(e) => {
+                      const n = Number(e.target.value);
+                      setDraft({
+                        ...draft,
+                        maxFailsBeforeSwitch: Number.isFinite(n) ? Math.max(1, Math.min(10, Math.trunc(n))) : 1,
+                      });
+                    }}
                   />
                 </SettingsField>
 

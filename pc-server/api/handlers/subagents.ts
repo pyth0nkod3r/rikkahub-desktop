@@ -14,6 +14,17 @@ import {
 import { subAgentRegistry } from "../../subagents/registry";
 import { subAgentEngine } from "../../subagents/engine";
 import type { SubAgentProfile, SubAgentRequest } from "../../subagents/types";
+import { state } from "../../persistence/json-store";
+
+function lookupModelMeta(modelUuid: string | null | undefined): { modelSlug: string | null; providerId: string | null } {
+  if (!modelUuid) return { modelSlug: null, providerId: null };
+  for (const p of state?.settings?.providers ?? []) {
+    const m = p.models.find((item) => item.id === modelUuid);
+    if (m) return { modelSlug: m.modelId ?? null, providerId: p.id ?? null };
+  }
+  return { modelSlug: null, providerId: null };
+}
+import type { SubAgentProfile, SubAgentRequest } from "../../subagents/types";
 
 export async function handleSubAgentRoutes(
   request: Request,
@@ -37,6 +48,12 @@ export async function handleSubAgentRoutes(
         description: String(body.description ?? "").trim(),
         systemPrompt: String(body.systemPrompt ?? "").trim(),
         modelId: body.modelId ? String(body.modelId) : null,
+        modelSlug: (body.modelSlug ? String(body.modelSlug) : null) ?? lookupModelMeta(body.modelId ? String(body.modelId) : null).modelSlug,
+        providerId: (body.providerId ? String(body.providerId) : null) ?? lookupModelMeta(body.modelId ? String(body.modelId) : null).providerId,
+        secondaryModelId: body.secondaryModelId ? String(body.secondaryModelId) : null,
+        secondaryModelSlug: (body.secondaryModelSlug ? String(body.secondaryModelSlug) : null) ?? lookupModelMeta(body.secondaryModelId ? String(body.secondaryModelId) : null).modelSlug,
+        secondaryProviderId: (body.secondaryProviderId ? String(body.secondaryProviderId) : null) ?? lookupModelMeta(body.secondaryModelId ? String(body.secondaryModelId) : null).providerId,
+        maxFailsBeforeSwitch: Number.isFinite(Number(body.maxFailsBeforeSwitch)) ? Math.max(1, Math.min(10, Math.trunc(Number(body.maxFailsBeforeSwitch)))) : 1,
         enabled: body.enabled !== false,
         tools: Array.isArray(body.tools) ? body.tools.map(String) : [],
         capabilities: Array.isArray(body.capabilities) ? body.capabilities.map(String) : [],

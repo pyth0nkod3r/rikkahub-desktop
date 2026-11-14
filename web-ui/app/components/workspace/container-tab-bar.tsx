@@ -10,10 +10,12 @@ import {
   PanelLeft,
   PanelRight,
   Pencil,
+  Terminal,
   TriangleAlert,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useWorkspaceLayoutStore } from "~/stores/workspace-layout-store";
 
 import { Input } from "~/components/ui/input";
 import { Button } from "~/components/ui/button";
@@ -569,13 +571,19 @@ function ContainerTab({
         </ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem onSelect={onCloseAll}>{t("workspace.tabs.ctx_close_all")}</ContextMenuItem>
-        {workspace && onReveal ? (
+        {workspace ? (
           <>
             <ContextMenuSeparator />
-            <ContextMenuItem onSelect={onReveal}>
-              <FolderOpen className="size-4" strokeWidth={1.75} />
-              {t("workspace.menu.reveal")}
+            <ContextMenuItem onSelect={() => useWorkspaceLayoutStore.getState().openTerminalModal(workspace.id)}>
+              <Terminal className="size-4" strokeWidth={1.75} />
+              Open Workspace Terminal
             </ContextMenuItem>
+            {onReveal ? (
+              <ContextMenuItem onSelect={onReveal}>
+                <FolderOpen className="size-4" strokeWidth={1.75} />
+                {t("workspace.menu.reveal")}
+              </ContextMenuItem>
+            ) : null}
           </>
         ) : null}
       </ContextMenuContent>

@@ -1,6 +1,6 @@
 // components/workspace/workspace-terminal-modal.tsx — Interactive Manual Sandbox Shell / Terminal Modal
 import * as React from "react";
-import { Terminal, Play, Trash2, Copy, Check, CornerDownLeft, Loader2, Shield, Folder } from "lucide-react";
+import { Terminal, Play, Trash2, Copy, Check, CornerDownLeft, Loader2, Shield, Folder, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -11,6 +11,8 @@ import {
 import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
 import api from "~/services/api";
+import { useWorkspaceLayoutStore } from "~/stores/workspace-layout-store";
+import { useWorkspaceStore } from "~/stores/workspace-store";
 import type { WorkspaceDto } from "~/types";
 
 interface TerminalEntry {
@@ -39,6 +41,19 @@ export function WorkspaceTerminalModal({
   const [executing, setExecuting] = React.useState(false);
   const [history, setHistory] = React.useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = React.useState<number>(-1);
+  const [openingExternal, setOpeningExternal] = React.useState(false);
+
+  const openExternalTerminal = React.useCallback(async () => {
+    setOpeningExternal(true);
+    try {
+      await api.post(`workspaces/${workspace.id}/terminal/open-external`, {});
+      toast.success("Opened workspace in external terminal");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to open external terminal");
+    } finally {
+      setOpeningExternal(false);
+    }
+  }, [workspace.id]);
 
   const scrollRef = React.useRef<HTMLDivElement | null>(null);
   const inputRef = React.useRef<HTMLInputElement | null>(null);
@@ -183,6 +198,18 @@ export function WorkspaceTerminalModal({
               type="button"
               variant="outline"
               size="sm"
+              disabled={openingExternal}
+              onClick={() => void openExternalTerminal()}
+              className="h-7 text-mini px-2 gap-1"
+              title="Open Workspace in External OS Terminal"
+            >
+              {openingExternal ? <Loader2 className="size-3 animate-spin" /> : <ExternalLink className="size-3" />}
+              External Terminal
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
               onClick={() => setEntries([])}
               className="h-7 text-mini px-2 gap-1"
               title="Clear Terminal Screen"
@@ -318,5 +345,64 @@ export function WorkspaceTerminalModal({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * Global host modal for opening any workspace terminal (or default Chat-mode terminal)
+ * from anywhere in the UI via `useWorkspaceLayoutStore.getState().openTerminalModal(id)`.
+ */
+export function GlobalWorkspaceTerminalModal() {
+  const terminalModalWorkspaceId = useWorkspaceLayoutStore((s) => s.terminalModalWorkspaceId);
+  const closeTerminalModal = useWorkspaceLayoutStore((s) => s.closeTerminalModal);
+  const workspaces = useWorkspaceStore((s) => s.workspaces);
+  const refresh = useWorkspaceStore((s) => s.refresh);
+  const [resolvedDefault, setResolvedDefault] = React.useState<WorkspaceDto | null>(null);
+
+  React.useEffect(() => {
+    if (!terminalModalWorkspaceId) return;
+    if (terminalModalWorkspaceId === "default") {
+      let cancelled = false;
+      api
+        .post<{ workspace: WorkspaceDto }>("workspaces/default", {})
+        .then((res) => {
+          if (!cancelled) {
+            setResolvedDefault(res.workspace);
+            void refresh();
+          }
+        })
+        .catch((err) => {
+          if (!cancelled) {
+            toast.error(err instanceof Error ? err.message : "Failed to initialize default terminal workspace");
+            closeTerminalModal();
+          }
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
+    setResolvedDefault(null);
+    if (!workspaces.some((w) => w.id === terminalModalWorkspaceId)) {
+      void refresh();
+    }
+  }, [terminalModalWorkspaceId, workspaces, refresh, closeTerminalModal]);
+
+  if (!terminalModalWorkspaceId) return null;
+
+  const targetWorkspace =
+    terminalModalWorkspaceId === "default"
+      ? resolvedDefault
+      : workspaces.find((w) => w.id === terminalModalWorkspaceId) ?? null;
+
+  if (!targetWorkspace) return null;
+
+  return (
+    <WorkspaceTerminalModal
+      workspace={targetWorkspace}
+      open={true}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) closeTerminalModal();
+      }}
+    />
   );
 }

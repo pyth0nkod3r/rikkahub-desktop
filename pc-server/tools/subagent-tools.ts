@@ -11,6 +11,45 @@ import { SUBAGENT_CAPABILITIES } from "../subagents/policy";
 import { listSubAgentProfiles } from "../subagents/db";
 import { subAgentEngine, SubAgentEngine, SubAgentProfileResolver } from "../subagents/engine";
 import { subAgentRegistry, SubAgentRegistry } from "../subagents/registry";
+import { executeSubAgentDag, type DagTaskSpec } from "../subagents/dag";
+
+const AGENT_NAME_ARG_ALIASES = [
+  "agent",
+  "role",
+  "subagent_type",
+  "subagentType",
+  "agent_name",
+  "agentName",
+  "profile",
+  "profile_name",
+  "profileName",
+  "type",
+] as const;
+
+/**
+ * Extracts a sub-agent profile name from common LLM argument aliases,
+ * label prefixes (e.g. "Researcher: inspect X"), or explicit task delegation phrases.
+ */
+export function extractAgentName(rawArgs: Record<string, JsonValue> | undefined): string | undefined {
+  if (!rawArgs) return undefined;
+  for (const key of AGENT_NAME_ARG_ALIASES) {
+    const val = rawArgs[key];
+    if (typeof val === "string" && val.trim()) {
+      return val.trim();
+    }
+  }
+  const label = typeof rawArgs.label === "string" ? rawArgs.label.trim() : "";
+  if (label) {
+    const colonMatch = /^([A-Za-z0-9_-]{2,32})\s*[:\-]\s+/.exec(label);
+    if (colonMatch) return colonMatch[1].trim();
+  }
+  const task = typeof rawArgs.task === "string" ? rawArgs.task.trim() : "";
+  if (task) {
+    const actMatch = /^\s*(?:act\s+as|as\s+(?:a|an|the)|role\s*[:=])\s+([A-Za-z0-9_-]{2,32})\b/i.exec(task);
+    if (actMatch) return actMatch[1].trim();
+  }
+  return undefined;
+}
 
 export function encodeRun(run: SubAgentRun): Record<string, JsonValue> {
   const result: Record<string, JsonValue> = {
@@ -35,7 +74,15 @@ export function encodeRun(run: SubAgentRun): Record<string, JsonValue> {
   if (run.resumedAfterMs != null) result.resumed_after_ms = run.resumedAfterMs;
   if (run.attemptedModel) result.attempted_model = run.attemptedModel;
   if (run.fallbackReason) result.fallback_reason = run.fallbackReason;
-  if (run.agentName) result.agent = run.agentName;
+  if (run.attemptedModel) result.attempted_model = run.attemptedModel;
+  if (run.fallbackReason) result.fallback_reason = run.fallbackReason;
+  if (run.agentName) {
+    result.agent = run.agentName;
+    result.role = run.agentName;
+    result.subagent_name = run.agentName;
+  }
+  if (run.verificationVerdict) result.verification_verdict = run.verificationVerdict;
+  if (run.verificationSummary != null) result.verification_summary = run.verificationSummary;
   if (run.subConversationId) result.sub_conversation_id = run.subConversationId;
   if (run.finishedAtMs != null) result.finished_at_ms = run.finishedAtMs;
   if (run.result != null && !run.noResult) {
@@ -209,6 +256,54 @@ Pass a clear, self-contained task. For long-running work, set run_in_background=
         },
       },
     },
+    {
+      type: "function" as const,
+      function: {
+        name: "subagent_dag_run",
+        description:
+          "Execute a declarative DAG of dependent sub-agent tasks with bounded parallelism, topological wave scheduling, and upstream failure skip propagation.",
+        parameters: {
+          type: "object",
+          properties: {
+            tasks: {
+              type: "array",
+              description: "Ordered or dependency-linked list of sub-agent tasks (max 20).",
+              items: {
+                type: "object",
+                properties: {
+                  id: { type: "string", description: "Unique short identifier for this DAG node." },
+                  task: { type: "string", description: "Self-contained prompt for this sub-agent task." },
+                  label: { type: "string", description: "Optional short display label." },
+                  depends_on: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "IDs of upstream tasks that must finish before this task runs.",
+                  },
+                  agent: { type: "string", description: "Optional sub-agent profile name/role." },
+                  model_id: { type: "string", description: "Optional model override." },
+                  tools: { type: "array", items: { type: "string" } },
+                  capabilities: { type: "array", items: { type: "string" } },
+                  run_condition: {
+                    type: "string",
+                    enum: ["on_success", "always"],
+                    description: "Whether to skip on upstream failure (default on_success).",
+                  },
+                  isolate_worktree: { type: "boolean" },
+                  timeout_seconds: { type: "integer" },
+                  max_trips: { type: "integer" },
+                },
+                required: ["id", "task"],
+              },
+            },
+            max_parallel: {
+              type: "integer",
+              description: "Maximum concurrent tasks per DAG wave (1 to 6, default 3).",
+            },
+          },
+          required: ["tasks"],
+        },
+      },
+    },
   ];
 }
 
@@ -240,7 +335,7 @@ export async function executeSubAgentTool(
     const res = await engine.dispatch(parentAssistantId, parentChatId, {
       task,
       label: args.label ? String(args.label) : undefined,
-      agentName: args.agent ? String(args.agent) : undefined,
+      agentName: extractAgentName(args),
       modelId: args.model_id ? String(args.model_id) : undefined,
       systemPrompt: args.system_prompt ? String(args.system_prompt) : undefined,
       tools,
@@ -309,6 +404,38 @@ export async function executeSubAgentTool(
     }
 
     return encodeRun(res.run);
+  }
+
+  if (toolName === "subagent_dag_run") {
+    const parentChatId = context?.conversationId ?? null;
+    const parentAssistantId = context?.assistantId ?? "";
+    const rawTasks = Array.isArray(args.tasks) ? args.tasks : [];
+    const parsedTasks: DagTaskSpec[] = rawTasks.map((item) => {
+      const obj = (item && typeof item === "object" ? item : {}) as Record<string, JsonValue>;
+      return {
+        id: String(obj.id ?? ""),
+        task: String(obj.task ?? ""),
+        label: obj.label ? String(obj.label) : undefined,
+        dependsOn: Array.isArray(obj.depends_on) ? (obj.depends_on as JsonValue[]).map(String) : undefined,
+        agent: extractAgentName(obj),
+        modelId: obj.model_id ? String(obj.model_id) : undefined,
+        tools: Array.isArray(obj.tools) ? (obj.tools as JsonValue[]).map(String) : undefined,
+        capabilities: Array.isArray(obj.capabilities) ? (obj.capabilities as JsonValue[]).map(String) : undefined,
+        runCondition: obj.run_condition === "always" ? "always" : "on_success",
+        isolateWorktree: Boolean(obj.isolate_worktree),
+        timeoutSeconds: obj.timeout_seconds ? Number(obj.timeout_seconds) : undefined,
+        maxTrips: obj.max_trips ? Number(obj.max_trips) : undefined,
+      };
+    });
+
+    const dagRes = await executeSubAgentDag({
+      tasks: parsedTasks,
+      parentAssistantId,
+      parentChatId,
+      maxParallel: args.max_parallel ? Number(args.max_parallel) : undefined,
+      engine,
+    });
+    return dagRes as unknown as Record<string, JsonValue>;
   }
 
   throw new Error(`Unknown subagent tool: ${toolName}`);

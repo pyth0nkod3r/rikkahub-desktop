@@ -507,6 +507,27 @@ export function markCompactionBoundary(conversation: Conversation): void {
   tail.annotations.push({ type: "compaction_boundary" });
 }
 
+function buildDeterministicCompactionFallback(
+  chunk: Message[],
+  isAgent: boolean,
+  targetTokens: number,
+  summarize: (msg: Message) => string,
+): string {
+  const parts: string[] = ["[Automated Context Summary — Fallback]"];
+  const charBudget = targetTokens * 4;
+  let accumulated = parts[0].length;
+  for (const msg of chunk) {
+    const text = summarize(msg).trim();
+    if (!text) continue;
+    const truncated = text.length > 300 ? text.slice(0, 300) + " …[truncated]" : text;
+    const line = `- [${msg.role}]: ${truncated}`;
+    if (accumulated + line.length > charBudget) break;
+    parts.push(line);
+    accumulated += line.length + 1;
+  }
+  return parts.join("\n");
+}
+
 export async function compressConversation(conversation: Conversation, additionalPrompt = "", targetTokens = 2000, keepRecentMessages = 32, signal?: AbortSignal) {
   const allMessages = selectedConversationMessages(conversation);
   if (allMessages.length === 0) throw new Error("当前会话没有可压缩的消息");
@@ -577,16 +598,28 @@ export async function compressConversation(conversation: Conversation, additiona
     // 压缩模型未配置(空/AUTO 哨兵)或已被删除 → 回退会话模型。不能直接把哨兵交给
     // findModel:它查不到就兜底"第一个供应商 + 猜 auto→gpt-4o-mini",对不提供该模型的
     // 服务商必 400(与标题/建议同一根因)。
-    summaries.push(cleanAuxiliaryText(await fetchAuxiliaryText(
-      modelExists(state.settings.compressModelId) ? state.settings.compressModelId : conversationModelIdFor(conversation),
-      prompt,
-      "compression",
-      {
-        stream: true,
-        signal,
-        conversationId: conversation.id,
-      },
-    )));
+    const chunkTimeoutController = new AbortController();
+    const timeoutTimer = setTimeout(() => chunkTimeoutController.abort(new Error("compaction_chunk_timeout")), 180_000);
+    const combinedSignal = signal ? AbortSignal.any([signal, chunkTimeoutController.signal]) : chunkTimeoutController.signal;
+
+    try {
+      const rawText = await fetchAuxiliaryText(
+        modelExists(state.settings.compressModelId) ? state.settings.compressModelId : conversationModelIdFor(conversation),
+        prompt,
+        "compression",
+        {
+          stream: true,
+          signal: combinedSignal,
+          conversationId: conversation.id,
+        },
+      );
+      summaries.push(cleanAuxiliaryText(rawText));
+    } catch (chunkErr) {
+      if (signal?.aborted) throw new DOMException("Compression cancelled", "AbortError");
+      summaries.push(buildDeterministicCompactionFallback(chunk, isAgent, targetTokens, summarize));
+    } finally {
+      clearTimeout(timeoutTimer);
+    }
   }
   // R7-4:落库前最后一道闸——取消后 LLM 结果作废,绝不改写会话(压缩是破坏性替换,
   // 取消语义必须硬保证)。

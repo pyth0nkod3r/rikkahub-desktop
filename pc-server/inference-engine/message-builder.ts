@@ -3,6 +3,7 @@
 // 不处理网络请求、不读写 state.json、不广播 SSE。
 
 import { existsSync, readFileSync } from "node:fs";
+import { sanitizeToolParametersSchema } from "../tools/schema-inline";
 import type { ApiMessage, Assistant, JsonValue, Message, MessagePart, Model, Provider, ToolOutputEntry } from "../foundation/types";
 import { id, isRecord } from "../foundation/utils";
 import {
@@ -730,7 +731,9 @@ export function responseApiFunctionTool(tool: { function: { name?: unknown; desc
     type: "function" as const,
     name: String(tool.function.name ?? ""),
     description: String(tool.function.description ?? ""),
-    parameters: tool.function.parameters ?? { type: "object", properties: {} },
+    parameters: sanitizeToolParametersSchema(
+      (tool.function.parameters ?? { type: "object", properties: {} }) as JsonValue,
+    ),
     strict: false as const,
   };
 }
@@ -1119,6 +1122,9 @@ export function reasoningPayloadForProvider(providerItem: Provider, modelItem: M
   // OFF maps to "none" (official completions accepts none since GPT-5.1+; Android 40426e93
   // dropped the old off→low clamp), AUTO sends no field.
   if (normalized === "auto") return {};
+  if (isDeepSeekModel(modelItem)) {
+    return normalized === "off" ? { thinking: { type: "disabled" } } : {};
+  }
   // K3 经透传型中转(未知 host)同样只认 low/high/max——档位收拢与 moonshot 官方
   // 分支、pi 引擎共用 request-dialect 同一张表;网关型 host(OpenRouter/DashScope
   // 等)有自己的方言翻译,已在上方各自分支返回,不经此兜底。off 例外:K3 官方不收

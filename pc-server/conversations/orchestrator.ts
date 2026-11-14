@@ -6,7 +6,7 @@ import { bumpAnalyticsErrCount } from "../app-config/analytics";
 import type { GenerationEventSink, GenerationTarget, StreamHooksWithSink, ToolExecutor } from "../inference-engine/events";
 import { id, isRecord, message, textFromParts } from "../foundation/utils";
 import { classifyProxyError } from "../foundation/net";
-import { classifyContextOverflowError, classifyOAuthCredentialError, classifyOutputCapError, classifyRateLimitError } from "../inference-engine/provider-errors";
+import { classifyContextOverflowError, classifyOAuthCredentialError, classifyOutputCapError, classifyRateLimitError, extractUpstreamContextLimit } from "../inference-engine/provider-errors";
 import { state } from "../persistence/json-store";
 import { addLog } from "../api/logs";
 import { broadcastConversation, broadcastEngineStatus, broadcastList, broadcastNodeUpdate, touchStream } from "../api/sse";
@@ -1300,9 +1300,17 @@ export async function generateAnswer(conversation: Conversation, regenerateAtNod
     bumpAnalyticsErrCount();
     const rawContent = err instanceof Error ? err.message : String(err);
     const proxyHint = classifyProxyError(err, state.settings.proxyConfig);
+    const contextOverflowText = classifyContextOverflowError(err);
+    if (contextOverflowText) {
+      const discoveredLimit = extractUpstreamContextLimit(err);
+      if (discoveredLimit && picked?.model && (!picked.model.contextLength || discoveredLimit < picked.model.contextLength)) {
+        picked.model.contextLength = discoveredLimit;
+        scheduleThrottledSaveState();
+      }
+    }
     const failureText =
       proxyHint
-      ?? classifyContextOverflowError(err)
+      ?? contextOverflowText
       ?? classifyOutputCapError(err)
       // 限流排在凭证失效之前:refresh 撞上游 429 时,错误串同时含 "OAuth refresh failed"
       // 与 "429",此刻"稍后重试"比"重新登录"准确(transient 不该引导重登)。

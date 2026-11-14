@@ -1,7 +1,7 @@
 // tools/bound.ts — 绑定当前全局 state 的工具聚合器（把 definitions 的纯函数与运行时设置绑定）
 // 纪律：纯搬迁自 server.ts（阶段 5.3d），行为不变。不进 tools/index.ts barrel（与 core 同名）。
 
-import type { Assistant, Model } from "../foundation/types";
+import type { Assistant, JsonValue, Model } from "../foundation/types";
 import { shouldUseExternalWebSearch } from "../inference-engine/message-builder";
 import { state } from "../persistence/json-store";
 import {
@@ -11,6 +11,8 @@ import {
   openAiSkillTools as openAiSkillToolsCore,
 } from "./definitions";
 import { listSkills } from "./skills";
+import { sanitizeToolParametersSchema } from "./schema-inline";
+import { selectSkillsForTurn } from "./skill-selector";
 import { openAiSubAgentTools } from "./subagent-tools";
 import { openAiAutomationTools } from "./automation-tools";
 import { openAiBrowserTools } from "./browser-tools";
@@ -67,8 +69,15 @@ export function conversationFunctionTools(
     ...openAiSshTools(),
     ...openAiTelegramTools(),
   ];
+  const sanitized = tools.map((t) => ({
+    ...t,
+    function: {
+      ...t.function,
+      parameters: sanitizeToolParametersSchema(t.function.parameters as JsonValue),
+    },
+  }));
   if (conversationId && SubAgentToolPolicies.isSubAgent(conversationId)) {
-    return SubAgentToolPolicies.filter(conversationId, tools, (t) => t.function.name);
+    return SubAgentToolPolicies.filter(conversationId, sanitized, (t) => t.function.name);
   }
-  return tools;
+  return sanitized;
 }

@@ -172,3 +172,38 @@ class SubAgentToolPoliciesRegistry {
 }
 
 export const SubAgentToolPolicies = new SubAgentToolPoliciesRegistry();
+
+export interface SubAgentFallbackPolicy {
+  secondaryModelId: string | null;
+  secondaryModelSlug: string | null;
+  secondaryProviderId: string | null;
+  maxFailsBeforeSwitch: number;
+}
+
+class SubAgentFallbackPolicyRegistry {
+  private policies = new Map<string, SubAgentFallbackPolicy>();
+
+  register(conversationId: string, policy: SubAgentFallbackPolicy): void {
+    this.policies.set(conversationId, {
+      secondaryModelId: policy.secondaryModelId ?? null,
+      secondaryModelSlug: policy.secondaryModelSlug ?? null,
+      secondaryProviderId: policy.secondaryProviderId ?? null,
+      maxFailsBeforeSwitch: Math.max(1, Math.min(10, Math.trunc(policy.maxFailsBeforeSwitch || 1))),
+    });
+  }
+
+  get(conversationId: string | null | undefined): SubAgentFallbackPolicy | undefined {
+    if (!conversationId) return undefined;
+    return this.policies.get(conversationId);
+  }
+
+  clear(conversationId: string): void {
+    this.policies.delete(conversationId);
+  }
+
+  clearAll(): void {
+    this.policies.clear();
+  }
+}
+
+export const SubAgentFallbackPolicies = new SubAgentFallbackPolicyRegistry();

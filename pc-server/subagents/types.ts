@@ -39,6 +39,10 @@ export interface SubAgentProfile {
   modelId: string | null;
   modelSlug?: string | null;
   providerId?: string | null;
+  secondaryModelId?: string | null;
+  secondaryModelSlug?: string | null;
+  secondaryProviderId?: string | null;
+  maxFailsBeforeSwitch?: number;
   enabled: boolean;
   tools: string[];
   capabilities: string[];
@@ -71,6 +75,11 @@ export interface SubAgentRun {
   tripCount: number;
   isolateWorktree?: boolean;
   worktreeDiff?: string | null;
+  resolvedModelId?: string | null;
+  resolvedModelSlug?: string | null;
+  fallbackReason?: string | null;
+  verificationVerdict?: "confirmed" | "contradicted" | "unconfirmed" | "unsuccessful" | "open";
+  verificationSummary?: string | null;
 }
 
 export interface SubAgentRequest {

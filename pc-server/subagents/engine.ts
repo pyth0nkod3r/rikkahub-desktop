@@ -25,14 +25,16 @@ import {
 } from "./types";
 import {
   buildSubAgentToolPolicy,
+  SubAgentFallbackPolicies,
   SubAgentToolPolicies,
 } from "./policy";
+import { verifySubAgentRun } from "./verify";
 import { getSubAgentRun, listSubAgentProfiles } from "./db";
 import { subAgentRegistry, SubAgentRegistry } from "./registry";
 
 export type ModelResolutionResult =
   | { type: "inherit" }
-  | { type: "resolved"; modelId: string }
+  | { type: "resolved"; modelId: string; fallbackReason?: string }
   | { type: "failed"; message: string };
 
 export class SubAgentModelResolver {
@@ -141,6 +143,35 @@ export class SubAgentProfileResolver {
   }
 }
 
+function matchModelCandidate(
+  chatCandidates: Array<{ provider: Provider; model: Model }>,
+  enabledProviders: Provider[],
+  modelId: string | null | undefined,
+  modelSlug: string | null | undefined,
+  providerId: string | null | undefined,
+): { matched?: { provider: Provider; model: Model }; ambiguous?: Array<{ provider: Provider; model: Model }> } {
+  if (modelId) {
+    const byUuid = chatCandidates.find((c) => c.model.id === modelId);
+    if (byUuid) return { matched: byUuid };
+  }
+
+  const slug = (modelSlug || "").trim().toLowerCase();
+  if (providerId && slug) {
+    const provider = enabledProviders.find((p) => p.id === providerId);
+    const model = provider?.models.find(
+      (m) => (m.type === "CHAT" || !m.type) && m.modelId.toLowerCase() === slug,
+    );
+    if (provider && model) return { matched: { provider, model } };
+  }
+
+  if (slug) {
+    const bySlug = chatCandidates.filter((c) => c.model.modelId.toLowerCase() === slug);
+    if (bySlug.length === 1) return { matched: bySlug[0] };
+    if (bySlug.length > 1) return { ambiguous: bySlug };
+  }
+  return {};
+}
+
 export function resolveSubAgentModel(
   modelResolution: ModelResolutionResult,
   profile: SubAgentProfile | null,
@@ -149,6 +180,13 @@ export function resolveSubAgentModel(
   if (modelResolution.type === "inherit" && profile) {
     if (!providers || providers.length === 0) {
       if (profile.modelId) return { type: "resolved", modelId: profile.modelId };
+      if (profile.secondaryModelId) {
+        return {
+          type: "resolved",
+          modelId: profile.secondaryModelId,
+          fallbackReason: `Primary model unavailable for profile "${profile.name}"; using secondary model.`,
+        };
+      }
       return modelResolution;
     }
 
@@ -165,41 +203,61 @@ export function resolveSubAgentModel(
     const candidateLine = (c: { provider: Provider; model: Model }) =>
       `${c.model.displayName || c.model.modelId} (${c.provider.name}) -> ${c.model.id}`;
 
-    // Tier 1: Exact UUID match in enabled providers
-    if (profile.modelId) {
-      const byUuid = chatCandidates.find((c) => c.model.id === profile.modelId);
-      if (byUuid) return { type: "resolved", modelId: byUuid.model.id };
+    // Primary resolution (UUID -> providerId+slug -> unique slug)
+    const primary = matchModelCandidate(
+      chatCandidates,
+      enabledProviders,
+      profile.modelId,
+      profile.modelSlug,
+      profile.providerId,
+    );
+    if (primary.matched) return { type: "resolved", modelId: primary.matched.model.id };
+    if (primary.ambiguous) {
+      return {
+        type: "failed",
+        message:
+          `Sub-agent profile '${profile.name}' configured model '${profile.modelSlug}' is ambiguous ` +
+          `across multiple providers (${primary.ambiguous.length} matches):\n` +
+          primary.ambiguous.map(candidateLine).join("\n") +
+          `\nSelect a specific provider in Settings → Sub-agents.`,
+      };
     }
 
-    // Tier 2: Provider affinity match (resilience against catalog refresh where model UUID changed)
-    const targetSlug = (profile.modelSlug || "").trim().toLowerCase();
-    if (profile.providerId && targetSlug) {
-      const provider = enabledProviders.find((p) => p.id === profile.providerId);
-      const model = provider?.models.find(
-        (m) => (m.type === "CHAT" || !m.type) && m.modelId.toLowerCase() === targetSlug,
+    // Secondary fallback resolution before failing
+    if (profile.secondaryModelId || profile.secondaryModelSlug) {
+      const secondary = matchModelCandidate(
+        chatCandidates,
+        enabledProviders,
+        profile.secondaryModelId,
+        profile.secondaryModelSlug,
+        profile.secondaryProviderId,
       );
-      if (model) return { type: "resolved", modelId: model.id };
-    }
-
-    // Tier 3 & 4: Model slug matching across enabled providers
-    if (targetSlug) {
-      const bySlug = chatCandidates.filter((c) => c.model.modelId.toLowerCase() === targetSlug);
-      if (bySlug.length === 1) {
-        return { type: "resolved", modelId: bySlug[0].model.id };
+      if (secondary.matched) {
+        return {
+          type: "resolved",
+          modelId: secondary.matched.model.id,
+          fallbackReason: `Primary model (${profile.modelSlug || profile.modelId || "default"}) unavailable for "${profile.name}"; fell back to secondary model (${secondary.matched.model.modelId}).`,
+        };
       }
-      if (bySlug.length > 1) {
+      if (secondary.ambiguous) {
         return {
           type: "failed",
           message:
-            `Sub-agent profile '${profile.name}' configured model '${profile.modelSlug}' is ambiguous ` +
-            `across multiple providers (${bySlug.length} matches):\n` +
-            bySlug.map(candidateLine).join("\n") +
+            `Sub-agent profile '${profile.name}' secondary model '${profile.secondaryModelSlug}' is ambiguous ` +
+            `across multiple providers (${secondary.ambiguous.length} matches):\n` +
+            secondary.ambiguous.map(candidateLine).join("\n") +
             `\nSelect a specific provider in Settings → Sub-agents.`,
         };
       }
     }
 
+    // No explicit primary/secondary configured on profile -> inherit parent assistant model
+    if (!profile.modelId && !profile.modelSlug && !profile.secondaryModelId && !profile.secondaryModelSlug) {
+      return modelResolution;
+    }
+
     // Explicitly configured model not available or provider disabled
+    const targetSlug = (profile.modelSlug || "").trim().toLowerCase();
     const anyCandidates: Array<{ provider: Provider; model: Model }> = [];
     for (const p of providers) {
       for (const m of p.models) {
@@ -224,6 +282,28 @@ export function resolveSubAgentModel(
     };
   }
   return modelResolution;
+}
+
+function resolveSecondaryFallbackModel(
+  policy: { secondaryModelId: string | null; secondaryModelSlug: string | null; secondaryProviderId: string | null },
+  providers: Provider[],
+): string | null {
+  if (!policy.secondaryModelId && !policy.secondaryModelSlug) return null;
+  const enabledProviders = providers.filter((p) => p.enabled !== false);
+  const chatCandidates: Array<{ provider: Provider; model: Model }> = [];
+  for (const p of enabledProviders) {
+    for (const m of p.models) {
+      if (m.type === "CHAT" || !m.type) chatCandidates.push({ provider: p, model: m });
+    }
+  }
+  const matched = matchModelCandidate(
+    chatCandidates,
+    enabledProviders,
+    policy.secondaryModelId,
+    policy.secondaryModelSlug,
+    policy.secondaryProviderId,
+  );
+  return matched.matched?.model.id ?? policy.secondaryModelId ?? null;
 }
 
 export type DispatchResult =
@@ -449,7 +529,7 @@ export class SubAgentEngine {
       assistantId: effectiveAssistantId,
       chatModelId: finalSubModelId,
       systemPrompt: subAgentSystemPrompt,
-      title: `[Sub-agent] ${request.label ?? request.task.slice(0, 40)}`,
+      title: profile ? `[Sub-agent: ${profile.name}] ${request.label ?? request.task.slice(0, 40)}` : `[Sub-agent] ${request.label ?? request.task.slice(0, 40)}`,
       messages: [],
       chatSuggestions: [],
       isPinned: false,
@@ -502,8 +582,17 @@ When you have finished, end with one short paragraph in plain text that summaris
       endpoint,
     }));
 
-    // Register tool policy for this sub-agent conversation
+    // Register tool & fallback policies for this sub-agent conversation
     SubAgentToolPolicies.register(subConvId, toolPolicy);
+    SubAgentFallbackPolicies.register(subConvId, {
+      secondaryModelId: profile?.secondaryModelId ?? null,
+      secondaryModelSlug: profile?.secondaryModelSlug ?? null,
+      secondaryProviderId: profile?.secondaryProviderId ?? null,
+      maxFailsBeforeSwitch: profile?.maxFailsBeforeSwitch ?? 1,
+    });
+    if (modelRes.type === "resolved" && modelRes.fallbackReason) {
+      this.registry.update(runId, (r) => ({ ...r, fallbackReason: modelRes.fallbackReason }));
+    }
 
     // Timeout timer
     let timer: NodeJS.Timeout | null = null;
@@ -516,14 +605,25 @@ When you have finished, end with one short paragraph in plain text that summaris
         }, timeoutMs);
       });
 
-      // Generation execution
+      // Generation execution (respects profile maxFailsBeforeSwitch before cascade switch)
       const generationPromise = (async () => {
-        checkoutConversation(subConvId);
-        try {
-          await generateAnswer(subConversation);
-          return "completed" as const;
-        } finally {
-          releaseConversation(subConvId);
+        const policyCfg = SubAgentFallbackPolicies.get(subConvId);
+        const maxPrimaryFails = Math.max(1, policyCfg?.maxFailsBeforeSwitch ?? 1);
+        let attempt = 0;
+        while (true) {
+          attempt += 1;
+          checkoutConversation(subConvId);
+          try {
+            await generateAnswer(subConversation);
+            return "completed" as const;
+          } catch (attemptErr) {
+            const aborted =
+              controller.signal.aborted ||
+              (attemptErr instanceof DOMException && attemptErr.name === "AbortError");
+            if (aborted || attempt >= maxPrimaryFails) throw attemptErr;
+          } finally {
+            releaseConversation(subConvId);
+          }
         }
       })();
 
@@ -565,6 +665,11 @@ When you have finished, end with one short paragraph in plain text that summaris
         }
       }
 
+      const verification = verifySubAgentRun(
+        { status: "succeeded", error: null, result: finalText, worktreeDiff },
+        updatedConv,
+      );
+
       this.registry.update(runId, (r) => ({
         ...r,
         status: "succeeded",
@@ -573,6 +678,8 @@ When you have finished, end with one short paragraph in plain text that summaris
         tokensIn,
         tokensOut,
         tripCount,
+        verificationVerdict: verification.verdict,
+        verificationSummary: verification.summary,
         finishedAtMs: Date.now(),
       }));
 
@@ -586,17 +693,25 @@ When you have finished, end with one short paragraph in plain text that summaris
         (err instanceof DOMException && err.name === "AbortError");
       let errorMsg = err instanceof Error ? err.message : String(err);
 
-      // Automatic Model Fallback Cascade for subagent failure
+      // Automatic Model Fallback Cascade for subagent failure (prefers profile secondary model)
       const runRecord = this.registry.get(runId);
       const fallbackEnabled = (state as any)?.settings?.displaySetting?.enableModelFallbackCascade !== false;
       if (!isAbort && runRecord && !runRecord.attemptedModel && fallbackEnabled) {
-        const fallbackModelId = state?.settings?.fastModelId || state?.settings?.chatModelId;
+        const policyCfg = SubAgentFallbackPolicies.get(subConvId);
+        const policySecondary = policyCfg
+          ? resolveSecondaryFallbackModel(policyCfg, state?.settings?.providers ?? [])
+          : null;
+        const fallbackModelId =
+          (policySecondary && policySecondary !== subConversation.chatModelId ? policySecondary : null) ||
+          state?.settings?.fastModelId ||
+          state?.settings?.chatModelId;
         if (fallbackModelId && fallbackModelId !== subConversation.chatModelId) {
           const originalModel = subConversation.chatModelId ?? "default";
           this.registry.update(runId, (r) => ({
             ...r,
             attemptedModel: originalModel,
             fallbackReason: errorMsg,
+            resolvedModelId: fallbackModelId,
           }));
           subConversation.chatModelId = fallbackModelId;
           persistConversation(subConversation);
@@ -618,6 +733,10 @@ When you have finished, end with one short paragraph in plain text that summaris
                 if (m.role === "ASSISTANT") fTrips += 1;
               }
             }
+            const fallbackVerification = verifySubAgentRun(
+              { status: "succeeded", error: null, result: fallbackFinalText, worktreeDiff },
+              fallbackConv,
+            );
             this.registry.update(runId, (r) => ({
               ...r,
               status: "succeeded",
@@ -625,6 +744,8 @@ When you have finished, end with one short paragraph in plain text that summaris
               tokensIn: fTokensIn,
               tokensOut: fTokensOut,
               tripCount: fTrips,
+              verificationVerdict: fallbackVerification.verdict,
+              verificationSummary: fallbackVerification.summary,
               finishedAtMs: Date.now(),
             }));
             persistConversation(fallbackConv);
@@ -650,6 +771,7 @@ When you have finished, end with one short paragraph in plain text that summaris
         removeSubAgentWorktree(worktree);
       }
       SubAgentToolPolicies.unregister(subConvId);
+      SubAgentFallbackPolicies.clear(subConvId);
       this.registry.clearJob(runId);
     }
   }
@@ -700,10 +822,12 @@ When you have finished, end with one short paragraph in plain text that summaris
         detail: `Conversation '${run.subConversationId}' not found`,
       };
     }
+    let fallbackPolicyProfile: SubAgentProfile | null = null;
     if (run.agentName) {
       const profiles = listSubAgentProfiles();
       const profileRes = SubAgentProfileResolver.resolve(run.agentName, profiles);
       if (profileRes.type === "resolved") {
+        fallbackPolicyProfile = profileRes.profile;
         const providers = state?.settings?.providers ?? [];
         const modelRes = resolveSubAgentModel({ type: "inherit" }, profileRes.profile, providers);
         if (modelRes.type === "resolved") {
@@ -715,6 +839,15 @@ When you have finished, end with one short paragraph in plain text that summaris
     }
     if (!subConversation.chatModelId) {
       subConversation.chatModelId = run.resolvedModelId ?? run.modelId ?? null;
+    }
+
+    if (run.subConversationId) {
+      SubAgentFallbackPolicies.register(run.subConversationId, {
+        secondaryModelId: fallbackPolicyProfile?.secondaryModelId ?? null,
+        secondaryModelSlug: fallbackPolicyProfile?.secondaryModelSlug ?? null,
+        secondaryProviderId: fallbackPolicyProfile?.secondaryProviderId ?? null,
+        maxFailsBeforeSwitch: fallbackPolicyProfile?.maxFailsBeforeSwitch ?? 1,
+      });
     }
 
     const taskWithWrapup = `${trimmedPrompt}
@@ -814,12 +947,18 @@ When you have finished, end with one short paragraph in plain text that summaris
 
       const updatedConv = getConversation(subConvId) ?? subConversation;
       const finalText = this.harvestFinalText(updatedConv);
+      const verification = verifySubAgentRun(
+        { status: "succeeded", error: null, result: finalText, worktreeDiff: null },
+        updatedConv,
+      );
 
       this.registry.update(runId, (r) => ({
         ...r,
         status: "succeeded",
         result: finalText,
         error: null,
+        verificationVerdict: verification.verdict,
+        verificationSummary: verification.summary,
         finishedAtMs: Date.now(),
       }));
 
@@ -840,6 +979,7 @@ When you have finished, end with one short paragraph in plain text that summaris
       this.notifyParentIfBackground(parentChatId, this.registry.get(runId));
     } finally {
       SubAgentToolPolicies.unregister(subConvId);
+      SubAgentFallbackPolicies.clear(subConvId);
       this.registry.clearJob(runId);
     }
   }
@@ -849,6 +989,11 @@ When you have finished, end with one short paragraph in plain text that summaris
       ...r,
       status,
       error: error ?? null,
+      verificationVerdict: status === "succeeded" ? r.verificationVerdict : "unsuccessful",
+      verificationSummary:
+        status === "succeeded"
+          ? r.verificationSummary
+          : `Run ended with status "${status}"${error ? `: ${error.slice(0, 180)}` : "."}`,
       finishedAtMs: Date.now(),
     }));
     broadcastList();

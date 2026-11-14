@@ -3,8 +3,15 @@
 
 import type { Workspace } from "../../foundation/types";
 import type { WorkspaceDto } from "../../foundation/types/dto";
-import { createWorkspace, deleteWorkspace, getWorkspace, listWorkspaces, trustWorkspace, updateWorkspace, workspaceStatus } from "../../workspace";
+import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { isAbsolute, resolve } from "node:path";
+import { createWorkspace, deleteWorkspace, ensureDefaultChatWorkspace, getWorkspace, listWorkspaces, trustWorkspace, updateWorkspace, workspaceStatus } from "../../workspace";
+import { assertInsideWorkspace } from "../../workspace/boundary";
 import { deleteWorkspaceEntry, listWorkspaceDir, previewWorkspaceFile, searchWorkspaceFiles, readWorkspaceAgentsFile, renameWorkspaceEntry, revealWorkspaceEntry, writeWorkspaceAgentsFile } from "../../workspace/files";
+import { listWorkspaceDiffs, revertWorkspaceDiff } from "../../workspace/diffs";
+import { scanWorkspaceAndGenerateAgentsMd } from "../../workspace/project-scan";
+import { searchWorkspaceIntelligence, type IntelSearchMode } from "../../workspace/file-intel";
 import { mountedWorkspaceToolNames, refreshShellAvailability, shellAvailability } from "../../workspace/runtime";
 import { error, json, readJson } from "../request";
 import { getSandboxStatus } from "../../workspace/sandboxing/detect";
@@ -13,6 +20,46 @@ import { createSandboxedBashOperations } from "../../workspace/sandboxing/runner
 export function shellStatusPayload(): { available: boolean; error: string | null; mountedTools: string[] } {
   const shell = shellAvailability();
   return { available: shell.available, error: shell.error ?? null, mountedTools: [...mountedWorkspaceToolNames()] };
+}
+
+function launchExternalTerminal(targetDir: string): void {
+  if (process.platform === "win32") {
+    const child = spawn("wt.exe", ["-d", targetDir], { detached: true, stdio: "ignore" });
+    child.on("error", () => {
+      const fallback = spawn(
+        "cmd.exe",
+        ["/c", "start", "", "/D", targetDir, "powershell.exe", "-NoExit"],
+        { detached: true, stdio: "ignore" },
+      );
+      fallback.on("error", () => {});
+      fallback.unref();
+    });
+    child.unref();
+    return;
+  }
+  if (process.platform === "darwin") {
+    const child = spawn("open", ["-a", "Terminal", targetDir], { detached: true, stdio: "ignore" });
+    child.on("error", () => {});
+    child.unref();
+    return;
+  }
+  const candidates: Array<[string, string[]]> = [
+    ["x-terminal-emulator", [`--working-directory=${targetDir}`]],
+    ["gnome-terminal", [`--working-directory=${targetDir}`]],
+    ["konsole", ["--workdir", targetDir]],
+    ["xfce4-terminal", [`--working-directory=${targetDir}`]],
+    ["kitty", ["--directory", targetDir]],
+    ["alacritty", ["--working-directory", targetDir]],
+    ["xterm", ["-e", "sh", "-c", `cd "${targetDir.replace(/"/g, '\\"')}" && exec "\${SHELL:-sh}"`]],
+  ];
+  const tryNext = (index: number): void => {
+    if (index >= candidates.length) return;
+    const [cmd, args] = candidates[index];
+    const child = spawn(cmd, args, { cwd: targetDir, detached: true, stdio: "ignore" });
+    child.on("error", () => tryNext(index + 1));
+    child.unref();
+  };
+  tryNext(0);
 }
 
 function toDto(workspace: Workspace): WorkspaceDto {
@@ -47,6 +94,11 @@ export async function handleWorkspaceRoutes(request: Request, _url: URL, path: s
   if (path === "workspaces/shell-status/refresh" && request.method === "POST") {
     refreshShellAvailability();
     return json({ shell: shellStatusPayload() });
+  }
+
+  if (path === "workspaces/default" && request.method === "POST") {
+    const workspace = ensureDefaultChatWorkspace();
+    return json({ workspace: toDto(workspace) });
   }
 
   const workspaceRoute = path.match(/^workspaces\/([^/]+)(?:\/(.*))?$/);
@@ -127,6 +179,47 @@ export async function handleWorkspaceRoutes(request: Request, _url: URL, path: s
   }
 
   // ---- 交互式终端执行接口:在指定工作区的沙箱环境内运行命令 ----
+  // ---- Workspace Diffs (Agent-2 Ledger) ----
+  if (sub === "diffs" && request.method === "GET") {
+    const workspace = getWorkspace(workspaceId);
+    if (!workspace) return error("Workspace not found", 404);
+    const limit = Number(_url.searchParams.get("limit") ?? "50");
+    return json({ diffs: listWorkspaceDiffs(workspaceId, limit) });
+  }
+
+  const revertMatch = sub.match(/^diffs\/([^/]+)\/revert$/);
+  if (revertMatch && request.method === "POST") {
+    const workspace = getWorkspace(workspaceId);
+    if (!workspace) return error("Workspace not found", 404);
+    const diffId = decodeURIComponent(revertMatch[1]);
+    const res = revertWorkspaceDiff(workspace, diffId);
+    if (!res.ok) return error(res.error, res.status);
+    return json({ ok: true, diff: res.record });
+  }
+
+  // ---- /init Project Scanner (Agent-2 Split-Ownership) ----
+  if (sub === "init-scan" && request.method === "POST") {
+    const workspace = getWorkspace(workspaceId);
+    if (!workspace) return error("Workspace not found", 404);
+    try {
+      const scanRes = scanWorkspaceAndGenerateAgentsMd(workspace);
+      return json({ ok: true, ...scanRes });
+    } catch (err) {
+      return error(err instanceof Error ? err.message : "Project scan failed", 400);
+    }
+  }
+
+  // ---- Workspace Intelligence & Specialized Search (Agent-2) ----
+  if (sub === "intel-search" && request.method === "GET") {
+    const workspace = getWorkspace(workspaceId);
+    if (!workspace) return error("Workspace not found", 404);
+    const mode = (_url.searchParams.get("mode") ?? "content") as IntelSearchMode;
+    const q = _url.searchParams.get("q") ?? _url.searchParams.get("query") ?? "";
+    const limit = Number(_url.searchParams.get("limit") ?? "30");
+    const hits = searchWorkspaceIntelligence(workspace, { mode, query: q, limit });
+    return json({ hits });
+  }
+
   if (sub === "terminal/exec" && request.method === "POST") {
     const workspace = getWorkspace(workspaceId);
     if (!workspace) return error("Workspace not found", 404);
@@ -165,6 +258,26 @@ export async function handleWorkspaceRoutes(request: Request, _url: URL, path: s
         cwd: execCwd,
       });
     }
+  }
+
+  // ---- Launch an interactive OS terminal window directly inside the workspace ----
+  if (sub === "terminal/open-external" && request.method === "POST") {
+    const workspace = getWorkspace(workspaceId);
+    if (!workspace) return error("Workspace not found", 404);
+    const body = await readJson<{ cwd?: string }>(request).catch(() => ({} as { cwd?: string }));
+    let targetDir = workspace.root;
+    const requestedCwd = typeof body?.cwd === "string" ? body.cwd.trim() : "";
+    if (requestedCwd) {
+      try {
+        const candidate = isAbsolute(requestedCwd) ? requestedCwd : resolve(workspace.root, requestedCwd);
+        targetDir = assertInsideWorkspace(candidate, workspace.root);
+      } catch (err) {
+        return error(err instanceof Error ? err.message : "Invalid terminal working directory", 400);
+      }
+    }
+    if (!existsSync(targetDir)) return error("Workspace directory does not exist", 404);
+    launchExternalTerminal(targetDir);
+    return json({ ok: true, cwd: targetDir });
   }
 
   if (sub === "trust" && request.method === "POST") {

@@ -11,8 +11,11 @@ import {
   FolderOpen,
   Loader2,
   RefreshCw,
+  Sparkles,
+  Terminal,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useWorkspaceLayoutStore } from "~/stores/workspace-layout-store";
 
 import { Button } from "~/components/ui/button";
 import {
@@ -89,6 +92,7 @@ export function WorkspaceFilesPanel({ workspaceId }: { workspaceId: string }) {
   const [agentsDialog, setAgentsDialog] = React.useState<{ data: AgentsFileState | null } | null>(null);
   const [agentsDraft, setAgentsDraft] = React.useState("");
   const [agentsSaving, setAgentsSaving] = React.useState(false);
+  const [scanning, setScanning] = React.useState(false);
 
   const loadDir = React.useCallback(
     async (relPath: string) => {
@@ -320,6 +324,16 @@ export function WorkspaceFilesPanel({ workspaceId }: { workspaceId: string }) {
           type="button"
           size="icon-sm"
           variant="ghost"
+          aria-label="Open Workspace Terminal"
+          title="Open Workspace Terminal"
+          onClick={() => useWorkspaceLayoutStore.getState().openTerminalModal(workspace.id)}
+        >
+          <Terminal className="size-3.5" />
+        </Button>
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="ghost"
           aria-label={t("workbench.files.agents_edit")}
           title={t("workbench.files.agents_edit")}
           onClick={() => void openAgentsDialog()}
@@ -388,6 +402,29 @@ export function WorkspaceFilesPanel({ workspaceId }: { workspaceId: string }) {
             />
           )}
           <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={scanning || agentsSaving || !agentsDialog?.data}
+              onClick={async () => {
+                if (!workspace) return;
+                setScanning(true);
+                try {
+                  const res = await api.post<{ ok: boolean; content: string }>(`workspaces/${workspace.id}/init-scan`, {});
+                  setAgentsDraft(res.content);
+                  toast.success("Project scanned and AGENTS.md updated");
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : "Project scan failed");
+                } finally {
+                  setScanning(false);
+                }
+              }}
+              className="mr-auto text-xs gap-1"
+            >
+              {scanning ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+              Auto-Scan Project (/init)
+            </Button>
             <Button type="button" variant="ghost" onClick={() => setAgentsDialog(null)}>
               {t("workbench.files.cancel")}
             </Button>

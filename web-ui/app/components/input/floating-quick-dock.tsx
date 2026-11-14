@@ -7,6 +7,7 @@ import {
   FolderGit2,
   PanelRight,
   Sparkles,
+  Terminal,
 } from "lucide-react";
 
 import { cn } from "~/lib/utils";
@@ -19,6 +20,7 @@ import { useSettingsStore } from "~/stores/app-store";
 interface FloatingQuickDockProps {
   conversationId: string | null;
   conversations?: ConversationListDto[];
+  workspaceId?: string | null;
   onCompress?: () => void;
   className?: string;
 }
@@ -26,6 +28,7 @@ interface FloatingQuickDockProps {
 export function FloatingQuickDock({
   conversationId,
   conversations = [],
+  workspaceId,
   onCompress,
   className,
 }: FloatingQuickDockProps) {
@@ -145,6 +148,21 @@ export function FloatingQuickDock({
             </button>
           </TooltipTrigger>
           <TooltipContent>Open project file explorer</TooltipContent>
+        </Tooltip>
+
+        {/* Direct Workspace Terminal Pill */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={() => useWorkspaceLayoutStore.getState().openTerminalModal(workspaceId || "default")}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-border/60 bg-background/50 hover:bg-accent hover:text-foreground text-[11px] transition-colors"
+            >
+              <Terminal className="size-3" />
+              <span>Terminal</span>
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>Open interactive workspace terminal</TooltipContent>
         </Tooltip>
 
         {/* Context Breakdown Pill */}

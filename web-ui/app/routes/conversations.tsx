@@ -1,5 +1,6 @@
 import { useWorkspaceLayoutStore, getChatWidthClass } from "~/stores/workspace-layout-store";
 import { SidecarPanel } from "~/components/workspace/sidecar-panel";
+import { GlobalWorkspaceTerminalModal } from "~/components/workspace/workspace-terminal-modal";
 import { FloatingQuickDock } from "~/components/input/floating-quick-dock";
 import * as React from "react";
 
@@ -2169,6 +2170,7 @@ const ConversationPaneView = React.memo(function ConversationPaneView({
             <VoiceModeBanner onEnd={() => voiceMode.stop()} onRetry={handleToggleVoiceMode} />
           ) : null}
           <FloatingQuickDock
+            workspaceId={activeWorkspace?.id}
             conversationId={activeId}
             conversations={conversations}
             onCompress={hasMessages ? handleCompressConversation : undefined}
@@ -3048,6 +3050,7 @@ function ConversationsPageInner() {
             </ResizablePanelGroup>
           )}
         </SidebarInset>
+        <GlobalWorkspaceTerminalModal />
         </SidebarProvider>
     </div>
   );

@@ -121,16 +121,35 @@ function inlineSchema(schema: JsonValue, root: JsonValue, resolving: ReadonlySet
   return { ...expanded, ...inlined };
 }
 
-/** MCP 工具 inputSchema 出线净化:内联展开所有文档内 $ref,丢弃 $defs。
- *  无 $ref 的 schema 原对象返回(调用方零拷贝成本,数量占绝大多数)。 */
+/**
+ * Recursively strips empty `required: []` arrays from JSON Schemas so strict OpenAI/Gemini/Anthropic
+ * proxies don't reject zero-required parameter objects with HTTP 400.
+ */
+export function sanitizeToolParametersSchema<T extends JsonValue>(schema: T): T {
+  if (schema === null || typeof schema !== "object") return schema;
+  if (Array.isArray(schema)) {
+    return schema.map((item) => sanitizeToolParametersSchema(item)) as unknown as T;
+  }
+  const obj = schema as Record<string, JsonValue>;
+  const out: Record<string, JsonValue> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (key === "required" && Array.isArray(value) && value.length === 0) {
+      continue;
+    }
+    out[key] = sanitizeToolParametersSchema(value);
+  }
+  return out as unknown as T;
+}
+
+/** MCP 工具 inputSchema 出线净化:内联展开所有文档内 $ref,丢弃 $defs,并清除空 required: []。 */
 export function inlineMcpToolSchema(schema: JsonValue): JsonValue {
-  if (!hasLocalRef(schema)) return schema;
+  if (!hasLocalRef(schema)) return sanitizeToolParametersSchema(schema);
   const inlined = inlineSchema(schema, schema, new Set());
   // $defs/$definitions 是纯引用容器,展开后已无人引用——留在根上只会白占 token
   // (Google 路还会因未知关键字增加 400 面),丢弃。
   if (inlined !== null && typeof inlined === "object" && !Array.isArray(inlined)) {
     const { $defs: _defs, definitions: _definitions, ...rest } = inlined as Record<string, JsonValue>;
-    return rest;
+    return sanitizeToolParametersSchema(rest);
   }
-  return inlined;
+  return sanitizeToolParametersSchema(inlined);
 }

@@ -113,6 +113,35 @@ const OAUTH_CREDENTIAL_PATTERNS: RegExp[] = [
 ];
 
 /** 命中"订阅凭证失效/无法刷新"类报错时返回人话文案(指路重新登录),否则 null。 */
+const CONTEXT_LIMIT_PATTERNS: Array<{ re: RegExp; group: number }> = [
+  // OpenAI / DeepSeek / vLLM: "maximum context length is 65536 tokens"
+  { re: /maximum context length(?:\s+is|\s*[:=])\s*(\d[\d,]*)\s*tokens?/i, group: 1 },
+  // Anthropic: "prompt is too long: 210145 tokens > 200000 maximum"
+  { re: /\d[\d,]*\s*(?:tokens?)?\s*>\s*(\d[\d,]*)\s*maximum/i, group: 1 },
+  // Gemini: "exceeds the maximum number of tokens allowed (1048576)"
+  { re: /maximum number of tokens(?:\s+allowed)?\s*(?:\(|is\s+|[:=]\s*)(\d[\d,]*)\)?/i, group: 1 },
+  // Generic proxies: "context length/window/limit (of|is|:) 131072"
+  { re: /context(?:\s+length|\s+window|\s+limit)\D{0,24}(\d[\d,]{3,8})\b/i, group: 1 },
+];
+
+/**
+ * Extracts an explicit upstream model context token limit from a provider error (bounded 1024..10_000_000).
+ */
+export function extractUpstreamContextLimit(err: unknown): number | null {
+  const text = err instanceof Error ? err.message : String(err ?? "");
+  if (!text) return null;
+  for (const { re, group } of CONTEXT_LIMIT_PATTERNS) {
+    const match = re.exec(text);
+    if (!match?.[group]) continue;
+    const rawNum = Number(match[group].replace(/,/g, ""));
+    if (Number.isFinite(rawNum)) {
+      const limit = Math.trunc(rawNum);
+      if (limit >= 1024 && limit <= 10_000_000) return limit;
+    }
+  }
+  return null;
+}
+
 export function classifyOAuthCredentialError(err: unknown): string | null {
   const text = err instanceof Error ? err.message : String(err ?? "");
   if (!text) return null;

@@ -1327,6 +1327,8 @@
     "name_label": "方案名称",
     "desc_label": "功能描述",
     "model_label": "专属模型",
+    "secondary_model_label": "备用回退模型",
+    "max_fails_label": "切换前失败阈值",
     "inherit_model": "继承自主助手的模型",
     "enabled_label": "启用此方案",
     "system_prompt_label": "专属系统提示词",
