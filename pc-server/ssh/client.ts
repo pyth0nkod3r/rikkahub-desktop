@@ -7,6 +7,7 @@ export interface SshExecOptions {
   user: string;
   command: string;
   keyPath?: string;
+  proxyJump?: string;
   timeoutSeconds?: number;
 }
 
@@ -17,6 +18,7 @@ export interface SshTransferOptions {
   localPath: string;
   remotePath: string;
   keyPath?: string;
+  proxyJump?: string;
   timeoutSeconds?: number;
 }
 
@@ -51,6 +53,9 @@ export async function sshExec(opts: SshExecOptions): Promise<{ stdout: string; s
 
   if (opts.keyPath) {
     args.push("-i", opts.keyPath);
+  }
+  if (opts.proxyJump) {
+    args.push("-J", opts.proxyJump);
   }
 
   args.push(`${opts.user}@${opts.host}`, opts.command);
@@ -105,6 +110,9 @@ export async function sftpUpload(opts: SshTransferOptions): Promise<{ success: b
 
   if (opts.keyPath) {
     args.push("-i", opts.keyPath);
+  }
+  if (opts.proxyJump) {
+    args.push("-J", opts.proxyJump);
   }
 
   args.push(opts.localPath, `${opts.user}@${opts.host}:${opts.remotePath}`);
@@ -164,6 +172,9 @@ export async function sftpDownload(opts: SshTransferOptions): Promise<{ success:
 
   if (opts.keyPath) {
     args.push("-i", opts.keyPath);
+  }
+  if (opts.proxyJump) {
+    args.push("-J", opts.proxyJump);
   }
 
   args.push(`${opts.user}@${opts.host}:${opts.remotePath}`, opts.localPath);

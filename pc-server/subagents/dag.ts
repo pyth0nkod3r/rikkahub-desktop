@@ -8,6 +8,7 @@ export interface DagTaskSpec {
   task: string;
   label?: string;
   dependsOn?: string[];
+  depends_on?: string[];
   agent?: string;
   modelId?: string;
   tools?: string[];
@@ -70,7 +71,8 @@ export function validateDagTasks(
   }
 
   for (const [id, spec] of byId.entries()) {
-    const deps = Array.isArray(spec.dependsOn) ? spec.dependsOn.map((d) => String(d).trim()).filter(Boolean) : [];
+    const rawList = spec.dependsOn ?? spec.depends_on;
+    const deps = Array.isArray(rawList) ? rawList.map((d) => String(d).trim()).filter(Boolean) : [];
     const seenDeps = new Set<string>();
     for (const dep of deps) {
       if (dep === id) return { ok: false, error: `DAG task '${id}' cannot depend on itself.` };

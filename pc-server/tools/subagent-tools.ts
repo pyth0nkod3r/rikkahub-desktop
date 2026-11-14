@@ -12,6 +12,7 @@ import { listSubAgentProfiles } from "../subagents/db";
 import { subAgentEngine, SubAgentEngine, SubAgentProfileResolver } from "../subagents/engine";
 import { subAgentRegistry, SubAgentRegistry } from "../subagents/registry";
 import { executeSubAgentDag, type DagTaskSpec } from "../subagents/dag";
+import { planGoalToDag } from "../subagents/dag-planner";
 
 const AGENT_NAME_ARG_ALIASES = [
   "agent",
@@ -304,6 +305,23 @@ Pass a clear, self-contained task. For long-running work, set run_in_background=
         },
       },
     },
+    {
+      type: "function",
+      function: {
+        name: "subagent_dag_plan",
+        description: "Synthesizes a cycle-checked DAG of sub-agent tasks from a natural language goal. Previews or executes the plan.",
+        parameters: {
+          type: "object",
+          properties: {
+            goal: { type: "string", description: "High-level goal or multi-step instruction to plan into a DAG." },
+            mode: { type: "string", enum: ["plan", "auto"], description: "Mode: 'plan' returns task DAG without execution; 'auto' executes immediately." },
+            default_model_id: { type: "string", description: "Optional default model for sub-agent tasks." },
+            max_parallel: { type: "integer", description: "Maximum concurrent tasks per wave if mode is 'auto' (1 to 6)." },
+          },
+          required: ["goal"],
+        },
+      },
+    },
   ];
 }
 
@@ -436,6 +454,40 @@ export async function executeSubAgentTool(
       engine,
     });
     return dagRes as unknown as Record<string, JsonValue>;
+  }
+
+  if (toolName === "subagent_dag_plan") {
+    const parentChatId = context?.conversationId ?? null;
+    const parentAssistantId = context?.assistantId ?? "";
+    const goal = String(args.goal ?? "");
+    const mode = args.mode === "auto" ? "auto" : "plan";
+    const maxParallel = args.max_parallel ? Number(args.max_parallel) : undefined;
+    const defaultModelId = args.default_model_id ? String(args.default_model_id) : undefined;
+
+    const planRes = await planGoalToDag(goal, {
+      defaultModelId,
+      mode,
+      dispatchFn: mode === "auto"
+        ? async (task) => {
+            const res = await engine.dispatch(parentAssistantId, parentChatId, {
+              agent: task.agent,
+              task: task.task,
+              label: task.label ?? task.id,
+              modelId: task.modelId,
+              tools: task.tools,
+              capabilities: task.capabilities,
+              isolateWorktree: task.isolateWorktree,
+              timeoutSeconds: task.timeoutSeconds,
+              maxTrips: task.maxTrips,
+            });
+            return {
+              success: res.ok,
+              output: res.ok ? JSON.stringify(res.run) : (res.detail || res.error),
+            };
+          }
+        : undefined,
+    });
+    return planRes as unknown as Record<string, JsonValue>;
   }
 
   throw new Error(`Unknown subagent tool: ${toolName}`);

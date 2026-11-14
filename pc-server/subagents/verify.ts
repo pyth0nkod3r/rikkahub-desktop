@@ -2,6 +2,7 @@
 
 import type { Conversation, Message } from "../foundation/types";
 import type { SubAgentRun, SubAgentStatus } from "./types";
+import { looksTruncated } from "./truncation";
 
 export type SubAgentVerificationVerdict =
   | "confirmed"
@@ -157,6 +158,19 @@ export function verifySubAgentRun(
   }
 
   const mutations = Array.from(fileMutations);
+
+  const truncation = run.result ? looksTruncated(run.result) : { isTruncated: false };
+  if (truncation.isTruncated) {
+    return {
+      verdict: "unconfirmed",
+      summary: `Output appears truncated (${truncation.reason}).`,
+      checksPassed,
+      checksFailed,
+      fileMutations: mutations,
+      toolCallCount,
+      testCommands,
+    };
+  }
 
   if (checksFailed > 0) {
     return {
